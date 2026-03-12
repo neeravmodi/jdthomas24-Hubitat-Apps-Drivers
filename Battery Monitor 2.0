@@ -1,208 +1,289 @@
-
 definition(
-    name: "Battery Monitor 2.0",
+    name: "Battery Monitor 2.3.1",
     namespace: "custom",
     author: "Jdthomas24",
-    description: "Advanced battery monitoring with categorized alerts and reports.",
+    description: "Advanced Hubitat battery monitoring with diagnostics, trends, manual summary, and drain analytics.",
     category: "Convenience",
     iconUrl: "",
-    iconX2Url: ""
+    iconX2Url: "",
+    iconX3Url: ""
 )
 
 preferences {
-    page(name: "configPage")
+    page(name: "mainPage")
 }
 
-def configPage() {
-    dynamicPage(name: "configPage", title: "Battery Monitor 2.0", install: true, uninstall: true) {
+def mainPage() {
+    dynamicPage(name: "mainPage", title: "Battery Monitor 2.3.1", install: true, uninstall: true) {
 
         section("Battery Devices") {
             input "autoDiscover", "bool",
-                title: "Automatically discover battery devices",
-                defaultValue: true
+                    title: "Automatically discover battery devices",
+                    defaultValue: true
 
             input "devices", "capability.battery",
-                title: "Manual device selection (optional)",
-                multiple: true,
-                required: false
+                    title: "Manual battery devices",
+                    multiple: true,
+                    required: false
         }
 
-        section("Battery Thresholds") {
-            input "criticalLevel", "number",
-                title: "Critical Battery Threshold (%)",
-                defaultValue: 25
+        section("Daily Summary Report") {
+            input "summaryTime", "time",
+                    title: "Daily report time",
+                    required: true
         }
 
-        section("Scan Frequency") {
+        section("Diagnostics") {
+            input "rapidDrainThreshold", "number",
+                    title: "Rapid drain threshold (%/day)",
+                    defaultValue: 2
+
+            input "staleDays", "number",
+                    title: "Device stale threshold (days)",
+                    defaultValue: 7
+        }
+
+        section("Tracking Frequency") {
             input "checkInterval", "enum",
-                title: "Battery Scan Frequency",
-                options: [
-                    "15":"Every 15 minutes",
-                    "30":"Every 30 minutes",
-                    "60":"Every hour",
-                    "180":"Every 3 hours",
-                    "480":"Every 8 hours"
-                ],
-                defaultValue: "60"
+                    title: "Battery scan interval",
+                    options:[
+                            "30":"Every 30 Minutes",
+                            "60":"Every Hour",
+                            "180":"Every 3 Hours",
+                            "480":"Every 8 Hours"
+                    ],
+                    defaultValue:"60"
         }
 
         section("Notifications") {
             input "enablePush", "bool",
-                title: "Enable Notifications",
-                defaultValue: true
+                    title: "Enable push notifications",
+                    defaultValue: true
 
             input "notifyDevices", "capability.notification",
-                title: "Notification Devices",
-                multiple: true,
-                required: false
+                    title: "Notification devices",
+                    multiple: true,
+                    required: false
         }
 
-        section("Battery Reports") {
-            input "dailySummary", "bool",
-                title: "Enable Battery Reports",
-                defaultValue: true
-
-            input "summaryFrequency", "enum",
-                title: "Report Frequency",
-                options: [
-                    "1":"Every Day",
-                    "2":"Every Other Day",
-                    "3":"Every 3 Days",
-                    "7":"Weekly"
-                ],
-                defaultValue: "1"
-
-            input "summaryTime", "time",
-                title: "Report Time"
-        }
-
-        section("Options") {
-            label title: "App Name", required: false
+        section("Manual Tools") {
+            href "manualSummaryPage", title: "Run Battery Summary Now", description: "Click to generate battery report immediately"
         }
     }
 }
 
-def installed() {
-    initialize()
+// Manual summary page
+def manualSummaryPage() {
+    // Pre-generate the report
+    state.lastManualReport = generateBatteryReport()
+
+    dynamicPage(name: "manualSummaryPage", title: "Battery Summary", uninstall: false, install: false) {
+        section("Summary Report") {
+            paragraph state.lastManualReport ?: "No battery data available"
+        }
+        section("Actions") {
+            input "refreshSummary", "button", title: "Refresh Summary"
+        }
+        section("Back") {
+            href "mainPage", title: "Back to Main Page"
+        }
+    }
 }
 
-def updated() {
-    log.info "Battery Monitor 2.0 updated. Rescheduling tasks."
+// Refresh button handler
+def refreshSummary() {
+    state.lastManualReport = generateBatteryReport()
+    log.info "Manual summary refreshed"
+}
+
+def installed(){ initialize() }
+def updated(){
     unsubscribe()
     unschedule()
     initialize()
 }
 
-def initialize() {
-    log.info "Battery Monitor 2.0 Initialized"
+def initialize(){
+    log.info "Battery Monitor 2.3.1 initialized"
 
-    state.lastAlert = [:]
-    state.summaryRun = false
+    if(!state.history) state.history = [:]
+    if(!state.trend) state.trend = [:]
 
-    def batteryDevices = getBatteryDevices()
-    if(batteryDevices) {
-        subscribe(batteryDevices, "battery", batteryEvent)
-    }
+    if(!rapidDrainThreshold) rapidDrainThreshold = 2
+    if(!staleDays) staleDays = 7
+    if(!checkInterval) checkInterval = "60"
 
-    scheduleBatteryScan()
+    def devs = getBatteryDevices()
+    if(devs) subscribe(devs,"battery",batteryEvent)
 
-    if(dailySummary && summaryTime) {
-        try {
-            schedule(summaryTime, summaryScheduler)
-            log.info "Battery summary scheduled at ${summaryTime}"
-        } catch(e) {
-            log.error "Failed to schedule summary: ${e}"
-        }
+    scheduleScan()
+
+    if(summaryTime){
+        schedule(summaryTime,summaryReport)
     }
 }
 
-def scheduleBatteryScan() {
-    switch(checkInterval) {
-        case "15":
-            runEvery15Minutes(scanBatteries)
-            break
-        case "30":
-            runEvery30Minutes(scanBatteries)
-            break
-        case "60":
-            runEvery1Hour(scanBatteries)
-            break
-        case "180":
-            runEvery3Hours(scanBatteries)
-            break
-        case "480":
-            schedule("0 0 */8 ? * *", scanBatteries)
-            break
+def scheduleScan(){
+    switch(checkInterval){
+        case "30": runEvery30Minutes(scanBatteries); break
+        case "60": runEvery1Hour(scanBatteries); break
+        case "180": runEvery3Hours(scanBatteries); break
+        case "480": schedule("0 0 */8 ? * *",scanBatteries); break
     }
 }
 
-def getBatteryDevices() {
-    def devs = []
-    if(autoDiscover) {
-        devs = location.allDevices.findAll { it.hasCapability("Battery") }
+def getBatteryDevices(){
+    def devs=[]
+    if(autoDiscover){
+        devs = location.allDevices?.findAll{ it?.hasCapability("Battery") }
     }
-    if(devices) {
+    if(devices){
         devs += devices
     }
-    return devs.unique { it.id }
+    return devs?.findAll{it != null}?.unique{it.id} ?: []
 }
 
-def batteryEvent(evt) {
+def batteryEvent(evt){
     def level = evt.value?.toInteger()
-    if(level == null) return
-    evaluateBattery(evt.device, level)
+    if(level==null) return
+    trackBattery(evt.device,level)
 }
 
-def scanBatteries() {
-    log.debug "Scanning battery devices"
-    getBatteryDevices().each { device ->
-        try {
-            def level = device.currentValue("battery")
-            if(level != null) {
-                evaluateBattery(device, level.toInteger())
-            }
-        } catch(e) {
-            log.warn "Battery read error for ${device.displayName}"
+def scanBatteries(){
+    getBatteryDevices().each{ device->
+        def level=device.currentValue("battery")?.toInteger()
+        if(level!=null){
+            trackBattery(device,level)
         }
     }
 }
 
-def evaluateBattery(device, level) {
-    // Skip immediate alerts if summary report is running
-    if(state.summaryRun) return
-
-    if(state.lastAlert[device.id] == level) return
-
-    if(level <= criticalLevel) {
-        notify("CRITICAL: ${device.displayName} battery is ${level}%")
-        state.lastAlert[device.id] = level
+def trackBattery(device,level){
+    if(!state.history[device.id]){
+        state.history[device.id]=[
+                lastLevel:level,
+                lastDate:now(),
+                drain:0
+        ]
         return
     }
 
-    if(level > criticalLevel && level <= 70) {
-        notify("GOOD: ${device.displayName} battery is ${level}%")
-        state.lastAlert[device.id] = level
-        return
+    def data = state.history[device.id]
+    def days=(now()-data.lastDate)/(1000*60*60*24)
+    if(days>0){
+        def drain=(data.lastLevel-level)/days
+        if(drain>=0){
+            data.drain=drain.round(2)
+        }
+        updateTrend(device,drain)
     }
 
-    if(level > 70 && level < 100) {
-        notify("HIGH CHARGE: ${device.displayName} battery is ${level}%")
-        state.lastAlert[device.id] = level
-        return
-    }
-
-    if(level == 100) {
-        notify("FULL CHARGE: ${device.displayName} battery is ${level}%")
-        state.lastAlert[device.id] = level
-    }
+    data.lastLevel=level
+    data.lastDate=now()
 }
 
-def notify(msg) {
+def updateTrend(device,drain){
+    if(drain==null) return
+    if(drain < 0.3) state.trend[device.id]="Stable"
+    else if(drain < 1) state.trend[device.id]="Draining"
+    else if(drain < 2) state.trend[device.id]="Moderate Drain"
+    else state.trend[device.id]="Rapid Drain"
+}
+
+def getDrainRate(device){
+    def data=state.history[device.id]
+    if(!data) return null
+    return data.drain
+}
+
+// Generate battery report string
+def generateBatteryReport() {
+    def devs=getBatteryDevices()
+    if(!devs) return "No devices found"
+
+    def critical=[]
+    def good=[]
+    def high=[]
+    def full=[]
+    def rapid=[]
+    def stale=[]
+    def worst=[]
+
+    devs.each{ device->
+        def level=device.currentValue("battery")?.toInteger()
+        if(level==null) return
+
+        if(level<=25) critical<<"${level}% - ${device.displayName}"
+        else if(level<=70) good<<"${level}% - ${device.displayName}"
+        else if(level<100) high<<"${level}% - ${device.displayName}"
+        else full<<"${level}% - ${device.displayName}"
+
+        def drain=getDrainRate(device)
+        if(drain){
+            worst<<[device.displayName,drain]
+            if(drain>=rapidDrainThreshold){
+                rapid<<"${drain}%/day - ${device.displayName}"
+            }
+        }
+
+        def data=state.history[device.id]
+        if(data){
+            def days=(now()-data.lastDate)/(1000*60*60*24)
+            if(days>=staleDays){
+                stale<<"${device.displayName} (${days.round()} days)"
+            }
+        }
+    }
+
+    worst.sort{ -it[1] }
+
+    def msg="Battery Report (${devs.size()} devices)\n"
+
+    if(critical){
+        msg+="\nCRITICAL\n"
+        critical.each{ msg+=it+"\n" }
+    }
+    if(good){
+        msg+="\nGOOD\n"
+        good.each{ msg+=it+"\n" }
+    }
+    if(high){
+        msg+="\nHIGH CHARGE\n"
+        high.each{ msg+=it+"\n" }
+    }
+    if(full){
+        msg+="\nFULL\n"
+        full.each{ msg+=it+"\n" }
+    }
+    if(rapid){
+        msg+="\nRAPID DRAIN\n"
+        rapid.each{ msg+=it+"\n" }
+    }
+    if(stale){
+        msg+="\nNOT REPORTING\n"
+        stale.each{ msg+=it+"\n" }
+    }
+    if(worst){
+        msg+="\nWORST BATTERY DEVICES\n"
+        worst.take(5).each{ msg+="${it[0]} - ${it[1]}%/day\n" }
+    }
+
+    notify(msg)
+
+    return msg
+}
+
+// Scheduled summary
+def summaryReport() {
+    state.lastManualReport = generateBatteryReport()
+}
+
+// Notification helper
+def notify(msg){
     log.info msg
     if(!enablePush) return
-
-    if(notifyDevices) {
-        notifyDevices.each {
+    if(notifyDevices){
+        notifyDevices.each{
             it.deviceNotification(msg)
         }
     } else {
@@ -210,72 +291,4 @@ def notify(msg) {
     }
 }
 
-def summaryScheduler() {
-    log.debug "Running scheduled battery summary"
-    state.summaryRun = true
-    sendBatteryReport()
-    state.lastSummary = now()
-    state.summaryRun = false
-}
-
-def sendBatteryReport() {
-    def devs = getBatteryDevices()
-    if(!devs || devs.size() == 0) {
-        notify("Battery Report: No battery devices found")
-        return
-    }
-
-    def critical = []
-    def good = []
-    def high = []
-    def full = []
-
-    devs.each { d ->
-        try {
-            def level = d.currentValue("battery")
-            if(level == null) return
-            level = level.toInteger()
-            if(level <= criticalLevel) critical << [name: d.displayName, level: level]
-            else if(level <= 70) good << [name: d.displayName, level: level]
-            else if(level < 100) high << [name: d.displayName, level: level]
-            else full << [name: d.displayName, level: level]
-        } catch(e) {
-            log.warn "Battery report error for ${d.displayName}"
-        }
-    }
-
-    critical = critical.sort { it.level }
-    good = good.sort { it.level }
-    high = high.sort { it.level }
-    full = full.sort { it.name }
-
-    def msg = []
-    msg << "Battery Report (${devs.size()} Devices)"
-
-    if(critical) {
-        msg << ""
-        msg << "CRITICAL BATTERIES (≤${criticalLevel}%)"
-        critical.each { msg << "${it.level}% - ${it.name}" }
-    }
-
-    if(good) {
-        msg << ""
-        msg << "GOOD BATTERIES (26–70%)"
-        good.each { msg << "${it.level}% - ${it.name}" }
-    }
-
-    if(high) {
-        msg << ""
-        msg << "HIGH CHARGE BATTERIES (71–99%)"
-        high.each { msg << "${it.level}% - ${it.name}" }
-    }
-
-    if(full) {
-        msg << ""
-        msg << "FULL CHARGE (100%)"
-        full.each { msg << "${it.level}% - ${it.name}" }
-    }
-
-    notify(msg.join("\n"))
-}
 

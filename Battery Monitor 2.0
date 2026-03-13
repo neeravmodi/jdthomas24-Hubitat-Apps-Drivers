@@ -128,7 +128,7 @@ def updateBattery(device, level){
     if(!state.history[device.id]){
         state.history[device.id] = [lastLevel: level, lastDate: now(), drain: 0]
         state.lowestLevel[device.id] = level
-        updateTrend(device, 0.05)  // Initialize trend with small drain
+        updateTrend(device, 0.5)  // realistic minimal drain
         return
     }
 
@@ -194,11 +194,11 @@ def updateTrend(device,drain){
 }
 
 // ------------------------- HELPERS -------------------------
-def getDrain(device){ return state.history?.get(device.id)?.drain ?: 0.05 }
+def getDrain(device){ return state.history?.get(device.id)?.drain ?: 0.5 }  // realistic minimal drain
 def getEstimatedDays(device){
     def level = device.currentValue("battery")?.toInteger() ?: 0
     def drain = getDrain(device)
-    if(drain <= 0) drain = 0.05
+    if(drain < 0.1) drain = 0.5  // realistic minimal drain
     return (level / drain).setScale(0, BigDecimal.ROUND_HALF_UP).toInteger()
 }
 def getHealth(device){

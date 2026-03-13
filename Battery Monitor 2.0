@@ -262,8 +262,11 @@ def trendsPage(){
             if(!devs){
                 paragraph "No battery devices found."
             } else {
-                def msg = String.format("%-25s %-7s %-7s %-8s %s\n","Device Name","Battery","Drain","EstDays","Trend")
+                // Header with correct spacing
+                def msg = String.format("%-28s %-8s %-6s %-8s %s\n",
+                    "Device Name", "Battery", "Drain", "EstDays", "Trend")
                 msg += "-".multiply(65) + "\n"
+
                 devs.each{ device ->
                     def level = device.currentValue("battery")?.toInteger()
                     def colorLevel = getBatteryLevelDisplay(level)
@@ -271,7 +274,12 @@ def trendsPage(){
                     def est = getEstimatedDays(device)
                     def trend = state.trend?.get(device.id) ?: "Stable"
                     def flag = level <= 25 ? "⚠️ " : "   "
-                    msg += String.format("%-25s %-7s %-7s %-8s %s\n","${flag}${device.displayName}",colorLevel,drain,est,trend)
+
+                    def paddedName = "${flag}${device.displayName}"
+
+                    // Fixed-width columns: Device Name 28, Battery 8, Drain 6, EstDays 8
+                    msg += String.format("%-28s %-8s %-6s %-8s %s\n",
+                        paddedName, colorLevel, drain.toString(), est.toString(), trend)
                 }
                 paragraph msg
             }

@@ -1,5 +1,5 @@
 definition(
-    name: "Battery Monitor 2.8.4",
+    name: "Battery Monitor 2.0",
     namespace: "jdthomas24",
     author: "Jdthomas24",
     description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking.",
@@ -24,7 +24,7 @@ preferences {
 // Bolded top note; removed bottom note
 // =====================
 def mainPage(){
-    dynamicPage(name:"mainPage",title:"Battery Monitor 2.8.4",install:true,uninstall:true){
+    dynamicPage(name:"mainPage",title:"Battery Monitor 2.0",install:true,uninstall:true){
 
         section("Auto Battery Discovery"){
             paragraph "**⚠ Important: The app will automatically detect all devices reporting battery levels. " +

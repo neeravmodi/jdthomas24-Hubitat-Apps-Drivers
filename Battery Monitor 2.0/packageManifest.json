@@ -30,9 +30,9 @@
     "Notification"
   ],
   "notes": [
-    "⚠ Auto discovery only: select which battery devices to monitor.",
+    "**⚠ Auto discovery only:** select which battery devices to monitor.",
     "Battery trends may be overestimated until the device reports at least 5 battery events.",
     "Daily report sorts devices by Critical, Good, and Full categories.",
-    "Manual battery replacement is supported via Replacement page."
+    "Manual battery replacement is supported via the Replacement page."
   ]
 }

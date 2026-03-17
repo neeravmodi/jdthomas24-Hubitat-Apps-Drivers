@@ -2,9 +2,10 @@
   "packageName": "Battery Monitor 2.0",
   "packageNamespace": "jdthomas24",
   "author": "Jason Thomas",
+  "minimumHEVersion": "2.2.0",
   "version": "2.8.4",
   "dateReleased": "2026-03-16",
-  "minimumHEVersion": "2.2.0",
+  "releaseNotes": "Initial HPM release",
   "category": "Convenience",
   "documentationLink": "https://github.com/jdthomas24/Hubitat-Apps-Drivers/tree/main/Battery%20Monitor%202.0",
   "apps": [
@@ -15,5 +16,6 @@
       "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor.groovy",
       "required": true
     }
-  ]
+  ],
+  "drivers": []
 }

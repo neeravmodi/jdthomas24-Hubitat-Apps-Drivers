@@ -1,5 +1,5 @@
 definition(
-    name: "Battery Monitor 2.0", // DO NOT CHANGE (HPM SAFE)
+    name: "Battery Monitor 2.1", // DO NOT CHANGE (HPM SAFE)
     namespace: "jdthomas24",
     author: "Jdthomas24",
     description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking.",
@@ -24,7 +24,7 @@ preferences {
 // Added custom app label
 // =====================
 def mainPage(){
-    dynamicPage(name:"mainPage",title:(settings?.customAppName ?: "Battery Monitor 2.0"),install:true,uninstall:true){
+    dynamicPage(name:"mainPage",title:(settings?.customAppName ?: "Battery Monitor 2.1"),install:true,uninstall:true){
 
         section("App Display Name"){
             input "customAppName","text",

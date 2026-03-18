@@ -294,7 +294,11 @@ def replacementPage(){
             if(reps.size()==0){ 
                 paragraph "No battery replacements detected." 
             } else { 
-                reps.reverse().each{ paragraph "${it.date} — ${it.device}" } 
+                reps.reverse().each{ r ->
+                    def deviceObj = autoDevices.find{ it.displayName == r.device }
+                    def level = deviceObj?.currentValue("battery") ?: "N/A"
+                    paragraph "${r.date} — ${r.device} — ${level}%"
+                } 
             }
         }
     }
@@ -323,7 +327,7 @@ def manualReplacementPage() {
     }
 }
 
-// Manual replacement confirm page
+// Manual replacement confirm page (FIXED & shows battery level in history)
 def manualReplacementConfirmPage() {
     if(state.replacements == null) state.replacements = []
 
@@ -333,12 +337,17 @@ def manualReplacementConfirmPage() {
                 replaceDevicesManual.each { deviceId ->
                     def device = autoDevices.find{ it.id == deviceId }
                     if(device){
+                        // Register replacement in history
                         state.replacements << [
                             device: device.displayName,
                             date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
                         ]
+                        // Reset drain & trend
                         state.history[device.id].drain = 0.3
                         state.trend[device.id] = "Stable"
+                        // Update lastLevel to 100 so logs/trends recognize replacement
+                        state.history[device.id].lastLevel = 100
+                        state.history[device.id].lastDate = now()
                     }
                 }
                 paragraph "Battery replacement for ${replaceDevicesManual.size()} device(s) has been recorded."

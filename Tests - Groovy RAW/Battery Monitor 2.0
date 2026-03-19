@@ -18,6 +18,7 @@ preferences {
     page(name:"manualReplacementPage")
     page(name:"manualReplacementConfirmPage")
     page(name:"infoPage")
+    page(name:"forceRefreshPage") // added for Force Refresh button
 }
 
 // =====================
@@ -64,6 +65,11 @@ def mainPage(){
             href "trendsPage",title:"Battery Trends"
             href "historyPage",title:"Battery Replacement History"
             href "replacementPage",title:"Manual Battery Replacement"
+        }
+
+        section("Force Refresh"){
+            paragraph "Tap the button below to immediately scan all battery devices and update trends."
+            href(name: "forceRefresh", title: "Force Battery Refresh", description: "", page: "forceRefreshPage")
         }
 
         section("Help & Info"){
@@ -280,9 +286,6 @@ def historyPage(){
     }
 }
 
-// =====================
-// REPLACEMENT PAGES
-// =====================
 def replacementPage(){
     dynamicPage(name:"replacementPage",title:"Battery Replacement",install:false){
         section("Manual Replacement"){
@@ -304,7 +307,6 @@ def replacementPage(){
     }
 }
 
-// Manual replacement page (multi-select)
 def manualReplacementPage() {
     if(state.replacements == null) state.replacements = []
 
@@ -327,7 +329,6 @@ def manualReplacementPage() {
     }
 }
 
-// Manual replacement confirm page (FIXED & shows battery level in history)
 def manualReplacementConfirmPage() {
     if(state.replacements == null) state.replacements = []
 
@@ -337,15 +338,12 @@ def manualReplacementConfirmPage() {
                 replaceDevicesManual.each { deviceId ->
                     def device = autoDevices.find{ it.id == deviceId }
                     if(device){
-                        // Register replacement in history
                         state.replacements << [
                             device: device.displayName,
                             date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
                         ]
-                        // Reset drain & trend
                         state.history[device.id].drain = 0.3
                         state.trend[device.id] = "Stable"
-                        // Update lastLevel to 100 so logs/trends recognize replacement
                         state.history[device.id].lastLevel = 100
                         state.history[device.id].lastDate = now()
                     }
@@ -361,9 +359,6 @@ def manualReplacementConfirmPage() {
     }
 }
 
-// =====================
-// SCHEDULED SUMMARY
-// =====================
 def scheduledSummary(){
     def devices = autoDevices.collect{ d -> [device: d, level: d.currentValue("battery")?.toInteger()] }.findAll{ it.level != null }
     devices = devices.sort{ it.level }
@@ -408,9 +403,6 @@ def scheduledSummary(){
     }
 }
 
-// =====================
-// INFO PAGE
-// =====================
 def infoPage(){
     dynamicPage(name:"infoPage", title:"Battery Health Guide", install:false){
 
@@ -485,6 +477,21 @@ def infoPage(){
                       "• Sudden spikes usually indicate a problem\n" +
                       "• Compare similar devices to identify outliers\n" +
                       "• Let the app collect data over time for best accuracy"
+        }
+    }
+}
+
+// =====================
+// NEW FORCE REFRESH PAGE
+// =====================
+def forceRefreshPage(){
+    dynamicPage(name: "forceRefreshPage", title: "Force Refresh", install: false, uninstall: false){
+        section("Refreshing Batteries"){
+            paragraph "Scanning all selected battery devices..."
+            scanBatteries()
+        }
+        section(){
+            href "mainPage", title: "Back to Main Page"
         }
     }
 }

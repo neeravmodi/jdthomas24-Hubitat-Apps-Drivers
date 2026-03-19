@@ -11,7 +11,7 @@
         "descriptive": "",
         "tags": ["Energy Monitoring","Monitoring"]
     },
-    }
+    {
         "id": "smartthings-motion-driver",
         "name": "SmartThings Motion Sensor Driver",
         "category": "Drivers",

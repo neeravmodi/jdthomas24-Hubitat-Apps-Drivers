@@ -7,7 +7,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "1.0.2"  // <-- Added version for Package Manager
+    version: "1.0.3"  // <-- Added version for Package Manager
 )
 
 preferences {
@@ -251,7 +251,11 @@ def trendsPage(){
     dynamicPage(name:"trendsPage",title:"Battery Trends",install:false){
         section("Battery Trend Analysis"){
             paragraph "⚠ Note: Trends may be overestimated until the device reports at least 5 battery events. Trend accuracy improves as more data is collected over time."
+            
+            // Collect devices reporting battery and sort alphabetically by displayName
             def devs = autoDevices.findAll{ it.currentValue("battery") != null }
+            devs = devs.sort{ a, b -> a.displayName <=> b.displayName }
+            
             if(!devs){ paragraph "No battery devices."; return }
 
             def table="<table style='width:100%; border-collapse: collapse;'>"

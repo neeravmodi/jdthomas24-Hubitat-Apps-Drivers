@@ -359,6 +359,12 @@ def historyPage(){
 
             // Create HTML table
             def table = "<table style='width:100%; border-collapse: collapse;'>"
+            
+            // Add bold note row at top
+            table += "<tr><td colspan='4' style='font-weight:bold; padding-bottom:5px;'>" +
+                     "<span style='color:green;'>A</span> = Auto replacement &nbsp;&nbsp; " +
+                     "<span style='color:blue;'>M</span> = Manual replacement</td></tr>"
+
             table += "<tr style='font-weight:bold; border-bottom:1px solid #000;'><td>Date</td><td>Device</td><td>Level</td><td>Type</td></tr>"
 
             latestReps.each{ r ->
@@ -379,9 +385,6 @@ def historyPage(){
                 table += "<td>${typeCode}</td>"
                 table += "</tr>"
             }
-
-            // Add notes for Type column
-            table += "<tr><td colspan='4' style='font-size:small;color:#555;padding-top:5px;'>A = Auto replacement &nbsp;&nbsp; M = Manual replacement</td></tr>"
 
             table += "</table>"
 

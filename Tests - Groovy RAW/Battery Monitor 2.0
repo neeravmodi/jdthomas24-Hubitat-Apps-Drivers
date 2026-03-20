@@ -7,7 +7,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "2.1.1"  // <-- Added version for Package Manager
+    version: "2.1.1"
 )
 
 preferences {
@@ -163,16 +163,35 @@ def updateBattery(device,level){
     data.lastDate=now()
 }
 
-def detectReplacement(device,newLevel,oldLevel){
-    if(oldLevel==null) return
-    if(newLevel>=95 && oldLevel<=40){
-        state.replacements << [
-            device:device.displayName,
-            level:(newLevel != null ? newLevel : "N/A"),
-            date:new Date().format("yyyy-MM-dd HH:mm",location.timeZone)
+// =====================
+// SAFE BATTERY REPLACEMENT
+// =====================
+def detectReplacement(device, newLevel, oldLevel) {
+    // Ensure device history exists
+    if(!state.history[device.id]){
+        state.history[device.id] = [
+            lastLevel: oldLevel ?: newLevel,
+            lastDate: now(),
+            drain: 0.3,
+            samples: []
         ]
-        state.history[device.id].drain=0.3
-        state.trend[device.id]="Stable"
+        state.trend[device.id] = "Stable"
+    }
+
+    // Replace oldLevel null with history value if needed
+    oldLevel = oldLevel ?: state.history[device.id].lastLevel
+
+    // Detect battery replacement: jump from ≤40% to ≥95%
+    if(newLevel >= 95 && oldLevel <= 40){
+        state.replacements << [
+            device: device.displayName,
+            level: newLevel,
+            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
+        ]
+        state.history[device.id].drain = 0.3
+        state.trend[device.id] = "Stable"
+        state.history[device.id].lastLevel = newLevel
+        state.history[device.id].lastDate = now()
     }
 }
 
@@ -230,13 +249,16 @@ def summaryPage(){
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'><td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Report</td></tr>"
             devs.each{ device ->
-            def level=device.currentValue("battery")?.toInteger()
-            def safeLevel = (level != null ? level : 0)
-            def color = (level != null ? getBatteryLevelDisplay(level) : "N/A")
-
-            table+="<tr>"
-            table+="<td>${safeLevel<=25 && level!=null ? '⚠️ ' : ''}${device.displayName}</td>"
-            table+="<td>${color}</td>"
+                def level=device.currentValue("battery")?.toInteger()
+                def color=getBatteryLevelDisplay(level)
+                table+="<tr>"
+                table+="<td>${level<=25?'⚠️ ':''}${device.displayName}</td>"
+                table+="<td>${color}</td>"
+                table+="<td>${String.format('%.2f',getDrain(device))}</td>"
+                table+="<td>${estDays(device)}</td>"
+                table+="<td>${health(device)}</td>"
+                table+="<td>${getLastReport(device)}</td>"
+                table+="</tr>"
             }
             table+="</table>"
             paragraph table
@@ -249,7 +271,6 @@ def trendsPage(){
         section("Battery Trend Analysis"){
             paragraph "⚠ Note: Trends may be overestimated until the device reports at least 5 battery events. Trend accuracy improves as more data is collected over time."
             
-            // Collect devices reporting battery and sort alphabetically by displayName
             def devs = autoDevices.findAll{ it.currentValue("battery") != null }
             devs = devs.sort{ a, b -> a.displayName <=> b.displayName }
             
@@ -277,18 +298,8 @@ def historyPage(){
     dynamicPage(name:"historyPage",title:"Battery Replacement History",install:false){
         section("Replacement Log"){
             def replacements = state.replacements ?: []
-
-            if(replacements.size()==0){ 
-                paragraph "No battery replacements detected." 
-            } else {
-                // Sort alphabetically by device name
-                def sorted = replacements.sort{ a, b -> a.device <=> b.device }
-
-                sorted.each{ r ->
-                    def level = (r.level != null) ? r.level : "N/A"
-                    paragraph "${r.device} - ${level}% - ${r.date}"
-                }
-            }
+            if(replacements.size()==0){ paragraph "No battery replacements detected." }
+            else{ replacements.reverse().each{ paragraph "${it.device} - ${it.level}% - ${it.date}" } }
         }
     }
 }
@@ -306,7 +317,7 @@ def replacementPage(){
             } else { 
                 reps.reverse().each{ r ->
                     def deviceObj = autoDevices.find{ it.displayName == r.device }
-                    def level = (r.level != null) ? r.level : (deviceObj?.currentValue("battery") ?: "N/A")
+                    def level = r.level ?: deviceObj?.currentValue("battery") ?: "N/A"
                     paragraph "${r.date} — ${r.device} — ${level}%"
                 } 
             }
@@ -349,14 +360,28 @@ def manualReplacementConfirmPage() {
                     def device = autoDevices.find{ it.id == deviceId }
                     if(device){
                         def level = device.currentValue("battery")?.toInteger() ?: 100
+
+                        // Ensure device history exists
+                        if(!state.history[device.id]){
+                            state.history[device.id] = [
+                                lastLevel: level,
+                                lastDate: now(),
+                                drain: 0.3,
+                                samples: []
+                            ]
+                            state.trend[device.id] = "Stable"
+                        }
+
                         state.replacements << [
                             device: device.displayName,
-                            level:(newLevel != null ? newLevel : "N/A"),
+                            level: level,
                             date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
                         ]
+
+                        // Update history after manual replacement
                         state.history[device.id].drain = 0.3
                         state.trend[device.id] = "Stable"
-                        state.history[device.id].lastLevel = 100
+                        state.history[device.id].lastLevel = level
                         state.history[device.id].lastDate = now()
                     }
                 }
@@ -464,8 +489,4 @@ def infoPage(Map params = [:]){
         section("<b>💡 Tips</b>"){
             paragraph "• Devices with consistent low drain are healthy\n" +
                       "• Sudden spikes usually indicate a problem\n" +
-                      "• Compare similar devices to identify outliers\n" +
-                      "• Let the app collect data over time for best accuracy"
-        }
-    }
-}
+                      "• Compare similar devices to identify outliers\n"

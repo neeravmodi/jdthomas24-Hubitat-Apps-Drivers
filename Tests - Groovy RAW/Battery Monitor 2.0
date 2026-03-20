@@ -349,12 +349,15 @@ def historyPage(){
                 return
             }
 
+            // Sort replacements alphabetically by device name
+            replacements = replacements.sort{ a, b -> a.device <=> b.device }
+
             // Create HTML table
             def table = "<table style='width:100%; border-collapse: collapse;'>"
             table += "<tr style='font-weight:bold; border-bottom:1px solid #000;'><td>Date</td><td>Device</td><td>Level</td><td>Type</td></tr>"
 
-            // Display latest first
-            replacements.reverse().each{ r ->
+            // Display replacements
+            replacements.each{ r ->
                 def deviceObj = autoDevices.find{ it.displayName == r.device }
                 def level = r.level ?: deviceObj?.currentValue("battery") ?: "N/A"
 
@@ -363,12 +366,17 @@ def historyPage(){
                                          : "<span style='color:green;font-weight:bold'>A</span>"
 
                 table += "<tr>"
-                table += "<td>${r.date.split(' ')[0]}</td>"  // show only the date
+                table += "<td>${r.date.split(' ')[0]}</td>"  // only show date
                 table += "<td>${r.device}</td>"
                 table += "<td>${level}%</td>"
                 table += "<td>${typeCode}</td>"
                 table += "</tr>"
             }
+
+            // Add notes row
+            table += "<tr><td colspan='4' style='padding-top:8px; font-size:small;'>"
+            table += "<b>Notes:</b> A = Auto-detected replacement (≤40% → ≥95%), M = Manual replacement"
+            table += "</td></tr>"
 
             table += "</table>"
 

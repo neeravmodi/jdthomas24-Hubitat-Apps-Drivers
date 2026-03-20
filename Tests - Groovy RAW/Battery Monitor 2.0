@@ -409,13 +409,16 @@ def manualReplacementPage() {
 }
 
 // --- Manual Replacement Confirm Page ---
-def manualReplacementConfirmPage(){
-    dynamicPage(name:"manualReplacementConfirmPage", title:"Processing Manual Replacement", install:false){
-        section("Processing Manual Replacement"){
-            if(replaceConfirmManual && replaceDevicesManual){
-                replaceDevicesManual.each{ id ->
-                    def dev = autoDevices.find{ it.id == id }
-                    if(dev){
+def manualReplacementConfirmPage() {
+    dynamicPage(name: "manualReplacementConfirmPage", title: "Processing Manual Replacement", install: false) {
+        section("Processing Manual Replacement") {
+            // Use settings.replaceDevicesManual, not just replaceDevicesManual
+            if(settings?.replaceDevicesManual) {
+                settings.replaceDevicesManual.each { name ->
+                    // Find device by displayName
+                    def dev = autoDevices.find { it.displayName == name }
+                    if(dev) {
+                        // Register in replacements
                         state.replacements << [
                             device: dev.displayName,
                             level: dev.currentValue("battery")?.toInteger() ?: 100,
@@ -429,8 +432,12 @@ def manualReplacementConfirmPage(){
                         state.history[dev.id]?.justReplaced = true
                     }
                 }
-                // Navigate directly to mainPage
-                redirectToMainPage()
+
+                // Clear selection after processing
+                app?.updateSetting("replaceDevicesManual", [value: [], type: "enum"])
+
+                // Go back to main page
+                mainPage()
             } else {
                 paragraph "No devices selected or confirmation missing. Please go back and try again."
             }

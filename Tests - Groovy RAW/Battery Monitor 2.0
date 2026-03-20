@@ -387,6 +387,11 @@ def replacementPage(){
 
 // --- Manual Replacement Page ---
 def manualReplacementPage(){
+    // Clear previous manual selections so nothing is pre-selected
+    if(app?.getSetting("replaceDevicesManual")){
+        app?.updateSetting("replaceDevicesManual",[value:[],type:"enum"])
+    }
+
     dynamicPage(name:"manualReplacementPage", title:"Manual Battery Replacement", install:false){
         section("Register Manual Battery Replacement"){
             paragraph "<b>Note: Only batteries replaced at ≤40% are automatically registered in the app. Manual replacement outside this threshold will not appear in replacement analytics.</b>"
@@ -396,10 +401,10 @@ def manualReplacementPage(){
                   multiple:true,
                   required:false,
                   options: autoDevices.collect{ it.displayName },
-                  submitOnChange:true   // <-- moved correctly inside the input
+                  submitOnChange:true
         }
 
-        // Always allow returning to main page even if no devices selected
+        // Done button always returns to main page
         section(){
             href "mainPage", title:"Done", description:"Return to Main Page"
         }

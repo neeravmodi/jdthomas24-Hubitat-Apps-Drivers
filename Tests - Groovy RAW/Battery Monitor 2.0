@@ -387,41 +387,24 @@ def replacementPage(){
 }
 
 // --- Manual Replacement Page ---
-def manualReplacementConfirmPage(){
-    dynamicPage(name:"manualReplacementConfirmPage", title:"Processing Manual Replacement", install:false){
-        section("Processing Manual Replacement"){
-            if(replaceConfirmManual && replaceDevicesManual){
-                replaceDevicesManual.each{ id ->
-                    def dev = autoDevices.find{ it.id == id }
-                    if(dev){
-                        state.replacements << [
-                            device: dev.displayName,
-                            level: dev.currentValue("battery")?.toInteger() ?: 100,
-                            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-                            manual: true
-                        ]
-                        state.history[dev.id]?.drain = 0.3
-                        state.trend[dev.id] = "Stable"
-                        state.history[dev.id]?.lastLevel = dev.currentValue("battery")?.toInteger() ?: 100
-                        state.history[dev.id]?.lastDate = now()
-                        state.history[dev.id]?.justReplaced = true
-                    }
-                }
-                // Navigate directly to mainPage
-                redirectToMainPage()
-            } else {
-                paragraph "No devices selected or confirmation missing. Please go back and try again."
-            }
+def manualReplacementPage(){
+    dynamicPage(name:"manualReplacementPage", title:"Register Manual Battery Replacement", install:false){
+        section("Select Devices for Manual Replacement"){
+            input "replaceDevicesManual","enum",
+                  title:"Select devices",
+                  multiple:true,
+                  required:false,
+                  options:autoDevices.collectEntries{ [(it.id):it.displayName] }
+
+            input "replaceConfirmManual","bool",
+                  title:"Confirm manual replacement",
+                  required:true
+        }
+
+        section("Instructions"){
+            paragraph "Only batteries replaced at ≤40% are automatically registered. Use this page to manually register other replacements."
         }
     }
-}
-
-// Helper function: redirect back to main page
-def redirectToMainPage(){
-    app?.updateSetting("replaceDevicesManual",[value:[],type:"enum"])
-    app?.updateSetting("replaceConfirmManual",[value:false,type:"bool"])
-    // Return to mainPage immediately
-    mainPage()
 }
 
 // --- Manual Replacement Confirm Page ---
@@ -454,7 +437,7 @@ def manualReplacementConfirmPage(){
     }
 }
 
-// Helper function: redirect back to main page
+// --- Helper function: redirect back to main page ---
 def redirectToMainPage(){
     app?.updateSetting("replaceDevicesManual",[value:[],type:"enum"])
     app?.updateSetting("replaceConfirmManual",[value:false,type:"bool"])

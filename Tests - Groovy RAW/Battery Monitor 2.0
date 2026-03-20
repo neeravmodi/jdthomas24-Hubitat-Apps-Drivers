@@ -460,7 +460,6 @@ def redirectToMainPage(){
             href "manualReplacementPage", title:"Back to Manual Replacement"
         }
     }
-}
 
 // =====================
 // DAILY SUMMARY REPORT

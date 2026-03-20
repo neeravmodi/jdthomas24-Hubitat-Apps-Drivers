@@ -386,27 +386,25 @@ def replacementPage(){
 }
 
 // --- Manual Replacement Page ---
-def manualReplacementPage(){
-    // Clear previous manual selections so nothing is pre-selected
-    if(app?.getSetting("replaceDevicesManual")){
-        app?.updateSetting("replaceDevicesManual",[value:[],type:"enum"])
-    }
-
-    dynamicPage(name:"manualReplacementPage", title:"Manual Battery Replacement", install:false, uninstall:false){
-        section("Register Manual Battery Replacement"){
+def manualReplacementPage() {
+    dynamicPage(name: "manualReplacementPage", title: "Manual Battery Replacement", install: false) {
+        section("Register Manual Battery Replacement") {
             paragraph "<b>Note: Only batteries replaced at ≤40% are automatically registered in the app. Manual replacement outside this threshold will not appear in replacement analytics.</b>"
 
-            input "replaceDevicesManual","enum",
-                  title:"Select devices manually replaced",
-                  multiple:true,
-                  required:false,
-                  options: autoDevices.collect{ it.displayName },
-                  submitOnChange:true
-
-            // Confirm button → process selected devices
-            href "manualReplacementConfirmPage", title:"Confirm", description:"Confirm selected devices for replacement"
+            input "replaceDevicesManual", "enum",
+                title: "Select devices manually replaced",
+                multiple: true,
+                required: false,
+                options: autoDevices.collect { it.displayName },
+                submitOnChange: true
         }
-        // No extra Done button section needed — Hubitat's built-in Done button will return to the main app
+
+        // Intercept Done: confirm selection and go to main page
+        if(replaceDevicesManual) {
+            section("Confirm Manual Replacement") {
+                href "manualReplacementConfirmPage", title: "Confirm Replacement", description: "Register selected batteries"
+            }
+        }
     }
 }
 

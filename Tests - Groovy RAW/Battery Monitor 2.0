@@ -109,28 +109,100 @@ def initialize(){
     subscribe(autoDevices,"battery",batteryHandler)
 
     scheduleScan()
+
+    scheduleReportFrequency()
+
+    autoDevices.each{ device ->
+        if(!state.history[device.id]){
+            def level=device.currentValue("battery")?.toInteger() ?:100
+            state.history[device.id]=[
+                lastLevel:level,
+                lastDate:now(),
+                drain:0.3,
+                samples:[]
+            ]
+            state.trend[device.id]="Stable"
+        }
+    }
+}
 def scheduleReportFrequency(){
+    unschedule("reportScheduler")
+
+    if(reportFrequency == "critical"){
+        return
+    }
+
+    if(!summaryTime){
+        return
+    }
+
+    schedule(summaryTime, reportScheduler)
+}
+
+def reportScheduler(){
     switch(reportFrequency){
+
         case "daily":
-            // handled by summaryTime scheduling
+            scheduledSummary()
             break
 
         case "every2":
-            runEvery1Day(reportWrapper)
+            if(shouldRunEveryXDays(2)){
+                scheduledSummary()
+            }
             break
 
         case "every3":
-            schedule("0 0 0 */3 * ?", reportWrapper)
+            if(shouldRunEveryXDays(3)){
+                scheduledSummary()
+            }
             break
 
         case "weekly":
-            runEvery1Week(reportWrapper)
-            break
-
-        case "critical":
-            // no scheduled reports
+            if(shouldRunWeekly()){
+                scheduledSummary()
+            }
             break
     }
+}
+
+def shouldRunEveryXDays(daysInterval){
+    def today = new Date().clearTime()
+    def lastRun = state.lastReportRun ? new Date(state.lastReportRun).clearTime() : null
+
+    if(!lastRun){
+        state.lastReportRun = now()
+        return true
+    }
+
+    def diff = (today.time - lastRun.time) / (1000*60*60*24)
+
+    if(diff >= daysInterval){
+        state.lastReportRun = now()
+        return true
+    }
+
+    return false
+}
+
+def shouldRunWeekly(){
+    def today = new Date()
+    def lastRun = state.lastReportRun ? new Date(state.lastReportRun) : null
+
+    if(!lastRun){
+        state.lastReportRun = now()
+        return true
+    }
+
+    if(today.format("u") == "1"){ // Monday (change if needed)
+        def diff = (today.time - lastRun.time) / (1000*60*60*24)
+        if(diff >= 7){
+            state.lastReportRun = now()
+            return true
+        }
+    }
+
+    return false
 }
 
 def reportWrapper(){

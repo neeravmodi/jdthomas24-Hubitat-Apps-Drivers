@@ -489,9 +489,6 @@ def manualReplacementPage(){
 
 // --- Manual Replacement Confirm Page ---
 def manualReplacementConfirmPage() {
-    // Clear selection as soon as confirm page is loaded
-    app.updateSetting("replaceDevicesManual", [value:[], type:"enum"])
-
     dynamicPage(name: "manualReplacementConfirmPage", title: "Processing Manual Replacement", install: false) {
         section("Processing Manual Replacement") {
             if(settings?.replaceDevicesManual) {
@@ -513,6 +510,9 @@ def manualReplacementConfirmPage() {
                     }
                 }
 
+                // Clear selection **after processing**
+                app.updateSetting("replaceDevicesManual", [value:[], type:"enum"])
+
                 section(){ paragraph "Done! Manual replacement registered." }
             } else {
                 paragraph "No devices selected or confirmation missing. Please go back and try again."
@@ -520,6 +520,7 @@ def manualReplacementConfirmPage() {
         }
     }
 }
+
 // =====================
 // DAILY SUMMARY REPORT
 // =====================

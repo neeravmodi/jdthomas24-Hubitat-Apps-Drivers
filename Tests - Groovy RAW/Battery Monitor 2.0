@@ -109,6 +109,41 @@ def initialize(){
     subscribe(autoDevices,"battery",batteryHandler)
 
     scheduleScan()
+def scheduleReportFrequency(){
+    switch(reportFrequency){
+        case "daily":
+            // handled by summaryTime scheduling
+            break
+
+        case "every2":
+            runEvery1Day(reportWrapper)
+            break
+
+        case "every3":
+            schedule("0 0 0 */3 * ?", reportWrapper)
+            break
+
+        case "weekly":
+            runEvery1Week(reportWrapper)
+            break
+
+        case "critical":
+            // no scheduled reports
+            break
+    }
+}
+
+def reportWrapper(){
+    if(reportFrequency == "every2"){
+        def days = (now() / (1000*60*60*24)).toInteger()
+        if(days % 2 == 0){
+            scheduledSummary()
+        }
+    } else {
+        scheduledSummary()
+    }
+}
+
 
    if(reportFrequency != "critical" && summaryTime){
     schedule(summaryTime,scheduledSummary)
@@ -183,6 +218,10 @@ def updateBattery(device, level){
 
     data.lastLevel = level
     data.lastDate = now()
+    // Trigger report if critical-only mode
+    if(reportFrequency == "critical" && level <= 25){
+    sendCriticalReport(device, level)
+}
 
     if(data.justReplaced){
         data.justReplaced = false
@@ -530,6 +569,19 @@ def scheduledSummary(){
     }
 }
 
+
+// =====================
+// CRITICAL ALERT FUNCTION (STEP 6)
+// =====================
+def sendCriticalReport(device, level){
+    def msg = "🔴 Critical Battery Alert\n\n${device.displayName} is at ${level}%"
+
+    def notifyList = notifyDevices?.unique{ it.id }
+    if(enablePush && notifyList){
+        notifyList.each{
+            it.deviceNotification(msg)
+        }
+    }
 // =====================
 // INFO PAGE
 // =====================

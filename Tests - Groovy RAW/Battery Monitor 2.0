@@ -522,21 +522,11 @@ def manualReplacementConfirmPage() {
                     }
                 }
 
-                // Clear selection only AFTER processing
-                app.updateSetting("replaceDevicesManual", [value:[], type:"enum"])
-
-                section(){ paragraph "Done! Manual replacement registered." }
-            } else {
-                paragraph "No devices selected or confirmation missing. Please go back and try again."
-            }
-        }
-    }
-}
-
                 // Clear selection after processing
                 app.updateSetting("replaceDevicesManual", [value:[], type:"enum"])
 
-                section(){ paragraph "Done! Manual replacement registered." }
+                // Display success message
+                paragraph "✅ Done! Manual replacement registered."
             } else {
                 paragraph "No devices selected or confirmation missing. Please go back and try again."
             }

@@ -204,10 +204,11 @@ def updateBattery(device, level){
 
     detectReplacement(device, level, data.lastLevel)
 
-    // Auto-clear recently replaced after 24h
-    if(data.justReplaced && (now() - data.lastDate) > 1000*60*60*24){
-        data.justReplaced = false
-    }
+   // Auto-clear recently replaced after 24h using replacedTime
+def replacedAt = data.replacedTime ?: now()
+if(data.justReplaced && (now() - replacedAt) > 1000*60*60*24){
+    data.justReplaced = false
+}
 
     def days = (now() - data.lastDate) / (1000*60*60*24)
     if(days > 0 && !data.justReplaced){

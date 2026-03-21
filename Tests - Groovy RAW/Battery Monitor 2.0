@@ -51,21 +51,21 @@ def mainPage(){
         }
 
         section("Report Settings"){
-    input "reportFrequency","enum",
-        title:"Report Frequency",
-        options:[
-            "daily":"Daily",
-            "every2":"Every 2 Days",
-            "every3":"Every 3 Days",
-            "weekly":"Weekly",
-            "critical":"Only When Critical"
-        ],
-        defaultValue:"daily"
+            input "reportFrequency","enum",
+                title:"Report Frequency",
+                options:[
+                    "daily":"Daily",
+                    "every2":"Every 2 Days",
+                    "every3":"Every 3 Days",
+                    "weekly":"Weekly",
+                    "critical":"Only When Critical"
+                ],
+                defaultValue:"daily"
 
-    input "summaryTime","time",
-        title:"Report Time (not used for Critical Only)",
-        required:false
-}
+            input "summaryTime","time",
+                title:"Report Time (not used for Critical Only)",
+                required:false
+        }
 
         section("Notifications"){
             input "enablePush","bool",title:"Enable notifications",defaultValue:true
@@ -95,7 +95,6 @@ def updated(){
     unsubscribe()
     unschedule()
     initialize()
-
     if(settings?.customAppName){
         app.updateLabel(settings.customAppName)
     }
@@ -105,13 +104,9 @@ def initialize(){
     if(!state.history) state.history=[:]
     if(!state.trend) state.trend=[:]
     if(!state.replacements) state.replacements=[]
-
     subscribe(autoDevices,"battery",batteryHandler)
-
     scheduleScan()
-
     scheduleReportFrequency()
-
     autoDevices.each{ device ->
         if(!state.history[device.id]){
             def level=device.currentValue("battery")?.toInteger() ?:100
@@ -127,37 +122,30 @@ def initialize(){
 }
 def scheduleReportFrequency(){
     unschedule("reportScheduler")
-
     if(reportFrequency == "critical"){
         return
     }
-
     if(!summaryTime){
         return
     }
-
     schedule(summaryTime, reportScheduler)
 }
 
 def reportScheduler(){
     switch(reportFrequency){
-
         case "daily":
             scheduledSummary()
             break
-
         case "every2":
             if(shouldRunEveryXDays(2)){
                 scheduledSummary()
             }
             break
-
         case "every3":
             if(shouldRunEveryXDays(3)){
                 scheduledSummary()
             }
             break
-
         case "weekly":
             if(shouldRunWeekly()){
                 scheduledSummary()
@@ -169,39 +157,32 @@ def reportScheduler(){
 def shouldRunEveryXDays(daysInterval){
     def today = new Date().clearTime()
     def lastRun = state.lastReportRun ? new Date(state.lastReportRun).clearTime() : null
-
     if(!lastRun){
         state.lastReportRun = now()
         return true
     }
-
     def diff = (today.time - lastRun.time) / (1000*60*60*24)
-
     if(diff >= daysInterval){
         state.lastReportRun = now()
         return true
     }
-
     return false
 }
 
 def shouldRunWeekly(){
     def today = new Date()
     def lastRun = state.lastReportRun ? new Date(state.lastReportRun) : null
-
     if(!lastRun){
         state.lastReportRun = now()
         return true
     }
-
-    if(today.format("u") == "1"){ // Monday (change if needed)
+    if(today.format("u") == "1"){ // Monday
         def diff = (today.time - lastRun.time) / (1000*60*60*24)
         if(diff >= 7){
             state.lastReportRun = now()
             return true
         }
     }
-
     return false
 }
 
@@ -216,22 +197,20 @@ def reportWrapper(){
     }
 }
 
-
-   if(reportFrequency != "critical" && summaryTime){
+if(reportFrequency != "critical" && summaryTime){
     schedule(summaryTime,scheduledSummary)
 }
 
-    autoDevices.each{ device ->
-        if(!state.history[device.id]){
-            def level=device.currentValue("battery")?.toInteger() ?:100
-            state.history[device.id]=[
-                lastLevel:level,
-                lastDate:now(),
-                drain:0.3,
-                samples:[]
-            ]
-            state.trend[device.id]="Stable"
-        }
+autoDevices.each{ device ->
+    if(!state.history[device.id]){
+        def level=device.currentValue("battery")?.toInteger() ?:100
+        state.history[device.id]=[
+            lastLevel:level,
+            lastDate:now(),
+            drain:0.3,
+            samples:[]
+        ]
+        state.trend[device.id]="Stable"
     }
 }
 
@@ -290,10 +269,9 @@ def updateBattery(device, level){
 
     data.lastLevel = level
     data.lastDate = now()
-    // Trigger report if critical-only mode
     if(reportFrequency == "critical" && level <= 25){
-    sendCriticalReport(device, level)
-}
+        sendCriticalReport(device, level)
+    }
 
     if(data.justReplaced){
         data.justReplaced = false
@@ -356,7 +334,6 @@ def health(device){
 
 def getBatteryLevelDisplay(level, device=null){
     level = (level instanceof Number ? level : null) ?: 100
-
     def label = ""
     if(level<=25) label = "🔴 ${level}%"
     else if(level<=70) label = "🟠 ${level}%"
@@ -397,6 +374,7 @@ def getLastReport(device){
 // =====================
 // PAGES
 // =====================
+
 // --- Battery Summary ---
 def summaryPage(){
     dynamicPage(name:"summaryPage",title:"Battery Summary",install:false){
@@ -446,7 +424,7 @@ def trendsPage(){
     dynamicPage(name:"trendsPage",title:"Battery Trends",install:false){
         section("Battery Trend Analysis"){
             paragraph "⚠ Note: Trends may be overestimated until the device reports at least 5 battery events. Trend accuracy improves as more data is collected over time. Devices with 'Recently Replaced' tag will clear when device starts reporting."
-            
+
             def devs = autoDevices.findAll{ it.currentValue("battery") != null }.sort{ a,b -> a.displayName <=> b.displayName }
             if(!devs){ paragraph "No battery devices."; return }
 
@@ -514,11 +492,6 @@ def replacementPage(){
             paragraph "<b>Note: Only batteries replaced at ≤40% are automatically registered in the app. Manual replacement outside this threshold will not appear in replacement analytics.</b>"
             href "manualReplacementPage", title:"Register Manual Battery Replacement"
         }
-
-        // You can keep this section removed or for layout purposes
-        // section("Replacement History"){
-        //     paragraph "Battery replacement history is available in the History tab."
-        // }
     }
 }
 
@@ -536,12 +509,10 @@ def manualReplacementPage(){
                   submitOnChange:true
         }
 
-        // Confirm selected devices (existing workflow)
         section(){
             href "manualReplacementConfirmPage", title:"Confirm Replacement", description:"Confirm the selected devices have been replaced"
         }
 
-        // Return to main page button
         section(){
             href "mainPage", title:"Return to Main Menu", description:"Go back to the main app page"
         }
@@ -552,106 +523,28 @@ def manualReplacementPage(){
 def manualReplacementConfirmPage() {
     dynamicPage(name: "manualReplacementConfirmPage", title: "Processing Manual Replacement", install: false) {
         section("Processing Manual Replacement") {
-            // Use settings.replaceDevicesManual, not just replaceDevicesManual
             if(settings?.replaceDevicesManual) {
-                settings.replaceDevicesManual.each { name ->
-                    // Find device by displayName
-                    def dev = autoDevices.find { it.displayName == name }
-                    if(dev) {
-                        // Register in replacements
+                settings.replaceDevicesManual.each{ deviceName ->
+                    def deviceObj = autoDevices.find{ it.displayName == deviceName }
+                    if(deviceObj){
                         state.replacements << [
-                            device: dev.displayName,
-                            level: dev.currentValue("battery")?.toInteger() ?: 100,
+                            device: deviceName,
+                            level: deviceObj.currentValue("battery")?.toInteger() ?: 100,
                             date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-                            manual: true
+                            manual:true
                         ]
-                        state.history[dev.id]?.drain = 0.3
-                        state.trend[dev.id] = "Stable"
-                        state.history[dev.id]?.lastLevel = dev.currentValue("battery")?.toInteger() ?: 100
-                        state.history[dev.id]?.lastDate = now()
-                        state.history[dev.id]?.justReplaced = true
-                        state.history[dev.id].replacedTime = now()
+                        state.history[deviceObj.id].lastLevel = deviceObj.currentValue("battery")?.toInteger() ?: 100
+                        state.history[deviceObj.id].drain = 0.3
+                        state.trend[deviceObj.id] = "Stable"
                     }
                 }
-
-                // Clear selection after processing
-                app?.updateSetting("replaceDevicesManual", [value: [], type: "enum"])
-
-                // Go back to main page
-                mainPage()
+                paragraph "Manual replacement has been recorded for selected devices."
             } else {
-                paragraph "No devices selected or confirmation missing. Please go back and try again."
+                paragraph "No devices selected for manual replacement."
             }
         }
-    }
-}
-
-// --- Helper function: redirect back to main page ---
-def redirectToMainPage(){
-    app?.updateSetting("replaceDevicesManual",[value:[],type:"enum"])
-    app?.updateSetting("replaceConfirmManual",[value:false,type:"bool"])
-    // Return to mainPage immediately
-    mainPage()
-}
-
-// =====================
-// DAILY SUMMARY REPORT
-// =====================
-def scheduledSummary(){
-    def devices = autoDevices.collect{ d -> [device: d, level: d.currentValue("battery")?.toInteger()] }.findAll{ it.level != null }
-    devices = devices.sort{ it.level }
-
-    def critical = []
-    def good = []
-    def full = []
-
-    devices.each{ entry ->
-        if(entry.level <= 25) critical << entry
-        else if(entry.level == 100) full << entry
-        else good << entry
-    }
-
-    def report = "Battery Monitor Daily Report\n\n"
-    report += "Critical (≤25%): ${critical.size()}\n"
-    report += "Good (26-99%): ${good.size()}\n"
-    report += "Full (100%): ${full.size()}\n\n"
-
-    if(critical){
-        report += "🔴 Critical Devices\n"
-        critical.each{ report += "${it.device.displayName} : ${it.level}%\n" }
-        report += "\n"
-    }
-
-    if(good){
-        report += "🟢 Good Devices\n"
-        good.each{ report += "${it.device.displayName} : ${it.level}%\n" }
-        report += "\n"
-    }
-
-    if(full){
-        report += "🟢 Full Devices\n"
-        full.each{ report += "${it.device.displayName} : ${it.level}%\n" }
-    }
-
-    def notifyList = notifyDevices?.unique{ it.id }
-    if(enablePush && notifyList){
-        notifyList.each{
-            it.deviceNotification(report)
-        }
-    }
-}
-
-
-// =====================
-// CRITICAL ALERT FUNCTION
-// =====================
-def sendCriticalReport(device, level){
-    def msg = "🔴 Critical Battery Alert\n\n${device.displayName} is at ${level}%"
-
-    def notifyList = notifyDevices?.unique{ it.id }
-    if(enablePush && notifyList){
-        notifyList.each{
-            it.deviceNotification(msg)
+        section(){
+            href "mainPage", title:"Return to Main Menu", description:"Go back to the main app page"
         }
     }
 }

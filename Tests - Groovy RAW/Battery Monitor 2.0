@@ -336,14 +336,27 @@ def detectReplacement(device, newLevel, oldLevel) {
 }
 
 // =====================
-// TREND LOGIC
+// TREND LOGIC (Auto-adjust for heavy reporters)
 // =====================
-def updateTrend(device,drain){
-    // Auto-adjust for heavy reporters
-    if(drain > 5) drain = 0.3  // suppress false high drain
-    if(drain<0.3) state.trend[device.id]="Stable"
-    else if(drain<0.8) state.trend[device.id]="Moderate"
-    else state.trend[device.id]="Heavy Drain"
+def updateTrend(device, drain){
+    // Suppress false heavy drain for devices that report frequently or spike
+    def adjustedDrain = drain
+    if(drain > 5){  // extremely high single-sample drain
+        adjustedDrain = 0.3
+    }
+
+    // Maintain recent history to auto-adjust for high reporters
+    def hist = state.history[device.id]
+    if(hist?.samples && hist.samples.size() >= 3){
+        def avg = hist.samples.sum() / hist.samples.size()
+        if(avg > 3){  // consistently high sample average
+            adjustedDrain = Math.min(adjustedDrain, 1.0) // cap to avoid false "Heavy Drain"
+        }
+    }
+
+    if(adjustedDrain < 0.3) state.trend[device.id] = "Stable"
+    else if(adjustedDrain < 0.8) state.trend[device.id] = "Moderate"
+    else state.trend[device.id] = "Heavy Drain"
 }
 
 def getDrain(device){ return state.history?.get(device.id)?.drain ?:0.3 }

@@ -217,7 +217,8 @@ def updateBattery(device, level){
     if(data.justReplaced && (now() - replacedAt) > 1000*60*60*24){
         data.justReplaced = false
     }
-def days = (now() - data.lastDate) / (1000*60*60*24)
+
+    def days = (now() - data.lastDate) / (1000*60*60*24)
 
     if(days > 0 && !data.justReplaced){
         def drain = (data.lastLevel - level) / days
@@ -237,10 +238,11 @@ def days = (now() - data.lastDate) / (1000*60*60*24)
     data.lastLevel = level
     data.lastDate = now()
 
+    // ✅ Critical report check
     if(reportFrequency == "critical" && level <= 25){
         sendCriticalReport(device, level)
+    }
 }
-
 
 // =====================
 // BATTERY REPLACEMENT
@@ -356,18 +358,24 @@ def getBatteryLevelDisplay(level, device=null){
 // =====================
 // PAGES
 // =====================
-// --- Battery Summary ---
+// --- Battery Summary Page ---
 def summaryPage(){
     dynamicPage(name:"summaryPage",title:"Battery Summary",install:false){
         section("Battery Summary"){
+            // Get all devices with a battery value
             def devs = autoDevices.findAll{ it.currentValue("battery") != null }
             devs = devs.sort{ a,b -> a.currentValue("battery") <=> b.currentValue("battery") }
-            if(!devs){ paragraph "No battery devices found."; return }
+            if(!devs){ 
+                paragraph "No battery devices found."
+                return 
+            }
 
+            // Start HTML table
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'><td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Report</td></tr>"
 
             devs.each{ device ->
+                // Ensure history exists
                 if(!state.history[device.id]){
                     state.history[device.id] = [
                         lastLevel: device.currentValue("battery")?.toInteger() ?: 100,
@@ -383,7 +391,11 @@ def summaryPage(){
                 def drain = getDrain(device)
                 def est = estDays(device)
                 def h = health(device)
-                def last = getLastReport(device)
+
+                // Use lastDate from state.history for Last Report
+                def lastReport = state.history[device.id]?.lastDate ? 
+                    new Date(state.history[device.id].lastDate).format("yyyy-MM-dd HH:mm", location.timeZone) : "N/A"
+
                 def color = getBatteryLevelDisplay(level, device)
 
                 table+="<tr>"
@@ -392,9 +404,10 @@ def summaryPage(){
                 table+="<td>${String.format('%.2f',drain)}</td>"
                 table+="<td>${est}</td>"
                 table+="<td>${h}</td>"
-                table+="<td>${last}</td>"
+                table+="<td>${lastReport}</td>"
                 table+="</tr>"
             }
+
             table+="</table>"
             paragraph table
         }

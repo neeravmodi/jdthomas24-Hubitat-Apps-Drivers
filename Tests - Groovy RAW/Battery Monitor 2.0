@@ -619,7 +619,7 @@ def manualReplacementPage(){
                 return
             }
 
-            // Use settings.manualDevice to persist selection
+            // Only manualDevice triggers page reload
             input "manualDevice", "enum",
                   title: "Select Device",
                   options: deviceOptions,
@@ -633,7 +633,7 @@ def manualReplacementPage(){
                       defaultValue: 100,
                       range: 0..100,
                       required: true,
-                      submitOnChange: true
+                      submitOnChange: false  // removed submitOnChange to prevent reload loop
 
                 // Show confirm button only when both inputs are selected
                 if(settings.manualLevel != null){
@@ -646,7 +646,7 @@ def manualReplacementPage(){
     }
 }
 
-// ===================== MANUAL REPLACEMENT CONFIRM =======================
+// ===================== CONFIRM PAGE ==========================
 def manualReplacementConfirmPage(){
     dynamicPage(name:"manualReplacementConfirmPage", title:"Confirm Manual Replacement", install:false){
         section("Confirm Replacement"){
@@ -666,17 +666,26 @@ def manualReplacementConfirmPage(){
 
             def device = (autoDevices ?: []).find{ it.displayName == selectedDeviceName }
 
-            if(device){
+            if(!device){
+                paragraph "❌ Device not found. Please go back and select a valid device."
+                return
+            }
+
+            // ✅ Show explicit confirmation button
+            input "confirmManualReplacement", "bool",
+                  title: "Yes, log this replacement",
+                  required: true,
+                  submitOnChange: true
+
+            if(settings.confirmManualReplacement){
                 logReplacement(device, selectedLevel, true)
+
                 paragraph "✅ Manual replacement logged for ${device.displayName} at ${selectedLevel}%."
 
-                // Clear both settings and state to prevent stale values
+                // Clear settings to prevent stale values
                 app.updateSetting("manualDevice",[value:null,type:"enum"])
                 app.updateSetting("manualLevel",[value:null,type:"number"])
-                state.manualReplacementDevice = null
-                state.manualReplacementLevel = null
-            } else {
-                paragraph "❌ Device not found. Please go back and select a valid device."
+                app.updateSetting("confirmManualReplacement",[value:null,type:"bool"])
             }
 
             href "manualReplacementPage",
@@ -685,6 +694,7 @@ def manualReplacementConfirmPage(){
         }
     }
 }
+
 // ============================================================
 // ===================== INFO PAGE ===========================
 // ============================================================

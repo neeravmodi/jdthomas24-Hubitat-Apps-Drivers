@@ -628,13 +628,24 @@ def manualReplacementPage(){
                   required:true,
                   submitOnChange:true
 
+            // Persist selection in state for confirm page
+            if(manualDevice){
+                state.manualReplacementDevice = manualDevice
+            }
+
             // Only show battery level input after a device is selected
             if(manualDevice){
                 input "manualLevel","number",
                       title:"Battery Level After Replacement",
                       defaultValue:100,
                       range:0..100,
-                      required:true
+                      required:true,
+                      submitOnChange:true
+
+                // Persist battery level in state
+                if(manualLevel != null){
+                    state.manualReplacementLevel = manualLevel.toInteger()
+                }
 
                 // Link to confirm page
                 href "manualReplacementConfirmPage",
@@ -650,17 +661,29 @@ def manualReplacementConfirmPage(){
     dynamicPage(name:"manualReplacementConfirmPage", title:"Confirm Manual Replacement", install:false){
         section("Confirm Replacement"){
 
-            if(!manualDevice){
+            def selectedDeviceName = state.manualReplacementDevice
+            def selectedLevel = state.manualReplacementLevel
+
+            if(!selectedDeviceName){
                 paragraph "❌ No device selected. Go back and select a device first."
                 return
             }
 
-            def device = (autoDevices ?: []).find{ it.displayName == manualDevice }
+            if(selectedLevel == null){
+                paragraph "❌ No battery level entered. Go back and enter the battery level."
+                return
+            }
+
+            def device = (autoDevices ?: []).find{ it.displayName == selectedDeviceName }
 
             if(device){
                 // Log the replacement safely
-                logReplacement(device, manualLevel.toInteger(), true)
-                paragraph "✅ Manual replacement logged for ${device.displayName} at ${manualLevel}%."
+                logReplacement(device, selectedLevel, true)
+                paragraph "✅ Manual replacement logged for ${device.displayName} at ${selectedLevel}%."
+                
+                // Clear state after logging to prevent stale selections
+                state.manualReplacementDevice = null
+                state.manualReplacementLevel = null
             } else {
                 paragraph "❌ Device not found. Please go back and select a valid device."
             }

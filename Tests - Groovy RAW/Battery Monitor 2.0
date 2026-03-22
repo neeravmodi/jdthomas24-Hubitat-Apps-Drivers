@@ -449,7 +449,33 @@ def logReplacement(device, newLevel, manual=false){
         manual: manual
     ]
 }
+// =====================
+// STALE + TIMING HELPERS
+// =====================
+def getLastBatteryTime(device){
+    return state.history[device.id]?.lastDate
+}
 
+def getLastActivityTime(device){
+    return device.getLastActivity()
+}
+
+def isStale(device){
+    def lastBattery = getLastBatteryTime(device)
+    def lastActivity = getLastActivityTime(device)
+
+    if(!lastBattery || !lastActivity) return false
+
+    def diffHours = (lastActivity - lastBattery) / (1000*60*60)
+    return diffHours >= 24
+}
+
+def formatTimeAgo(ts){
+    if(!ts) return "N/A"
+    def diffMs = now() - ts
+    def mins = (diffMs / (1000*60)).toInteger()
+    return mins < 60 ? "${mins}m ago" : "${(mins/60).toInteger()}h ago"
+}
 // =====================
 // PAGES
 // =====================
@@ -465,7 +491,9 @@ def summaryPage(){
             }
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
-            table+="<tr style='font-weight:bold;'><td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Report</td></tr>"
+            table+="<tr style='font-weight:bold;'>"
+            table+="<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
+            table+="</tr>"
 
             devs.each{ device ->
                 if(!state.history[device.id]){
@@ -484,14 +512,9 @@ def summaryPage(){
                 def est = estDays(device)
                 def h = health(device)
 
-                // Calculate rounded minutes/hours since last report
-                def lastReport = state.history[device.id]?.lastDate
-                def lastReportStr = "N/A"
-                if(lastReport){
-                    def diffMs = now() - lastReport
-                    def totalMinutes = (diffMs / (1000*60)).toInteger()
-                    lastReportStr = (totalMinutes < 60) ? "${totalMinutes}m ago" : "${(totalMinutes / 60).toInteger()}h ago"
-                }
+                def lastBatteryStr = formatTimeAgo(getLastBatteryTime(device))
+                def lastActivityStr = formatTimeAgo(getLastActivityTime(device))
+                def stale = isStale(device)
 
                 def color = getBatteryLevelDisplay(level, device)
 
@@ -501,7 +524,8 @@ def summaryPage(){
                 table+="<td>${String.format('%.2f',drain)}</td>"
                 table+="<td>${est}</td>"
                 table+="<td>${h}</td>"
-                table+="<td>${lastReportStr}</td>"
+                table+="<td>${lastBatteryStr}</td>"
+                table+="<td>${lastActivityStr}${stale ? ' ⚠️ Stale' : ''}</td>"
                 table+="</tr>"
             }
 
@@ -516,25 +540,26 @@ def trendsPage(){
         section("Battery Trend Analysis"){
             paragraph "⚠ Note: Trends may be overestimated until the device reports at least 5 battery events. Trend accuracy improves as more data is collected over time. Devices with 'Recently Replaced' tag will clear when device starts reporting."
 
-            def devs = autoDevices.findAll{ it.currentValue("battery") != null }.sort{ a,b -> a.displayName <=> b.displayName }
-            if(!devs){ paragraph "No battery devices."; return }
+            def devs = autoDevices.findAll{ it.currentValue("battery") != null }
+                                  .sort{ a,b -> a.displayName <=> b.displayName }
+            if(!devs){ 
+                paragraph "No battery devices."
+                return 
+            }
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
-            table+="<tr style='font-weight:bold;'><td>Device</td><td>Battery</td><td>Drain/day</td><td>Trend</td><td>Last Report</td></tr>"
+            table+="<tr style='font-weight:bold;'>"
+            table+="<td>Device</td><td>Battery</td><td>Drain/day</td><td>Trend</td><td>Last Battery</td><td>Last Activity</td>"
+            table+="</tr>"
 
             devs.each{ device ->
                 def level = device.currentValue("battery")?.toInteger() ?: 100
                 def drain = getDrain(device)
                 def trend = state.trend?.get(device.id) ?: 'Stable'
 
-                // Last report rounded
-                def lastReport = state.history[device.id]?.lastDate
-                def lastReportStr = "N/A"
-                if(lastReport){
-                    def diffMs = now() - lastReport
-                    def totalMinutes = (diffMs / (1000*60)).toInteger()
-                    lastReportStr = (totalMinutes < 60) ? "${totalMinutes}m ago" : "${(totalMinutes / 60).toInteger()}h ago"
-                }
+                def lastBatteryStr = formatTimeAgo(getLastBatteryTime(device))
+                def lastActivityStr = formatTimeAgo(getLastActivityTime(device))
+                def stale = isStale(device)
 
                 def color = getBatteryLevelDisplay(level, device)
 
@@ -543,7 +568,8 @@ def trendsPage(){
                 table+="<td>${color}</td>"
                 table+="<td>${String.format('%.2f',drain)}</td>"
                 table+="<td>${trend}</td>"
-                table+="<td>${lastReportStr}</td>"
+                table+="<td>${lastBatteryStr}</td>"
+                table+="<td>${lastActivityStr}${stale ? ' ⚠️ Stale' : ''}</td>"
                 table+="</tr>"
             }
 

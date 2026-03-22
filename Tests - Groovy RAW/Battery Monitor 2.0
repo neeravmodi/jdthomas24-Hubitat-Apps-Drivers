@@ -413,7 +413,10 @@ def summaryPage(){
         section("Battery Summary"){
             def devs = autoDevices.findAll{ it.currentValue("battery") != null }
             devs = devs.sort{ a,b -> a.currentValue("battery") <=> b.currentValue("battery") }
-            if(!devs){ paragraph "No battery devices found."; return }
+            if(!devs){ 
+                paragraph "No battery devices found."
+                return 
+            }
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'><td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Report</td></tr>"
@@ -435,13 +438,14 @@ def summaryPage(){
                 def est = estDays(device)
                 def h = health(device)
 
-                // --- Last Report in hours/minutes ago ---
+                // ===== Last Report in hours/minutes
                 def lastReport = state.history[device.id]?.lastDate
                 def lastReportStr = "N/A"
                 if(lastReport){
                     def diffMs = now() - lastReport
-                    def diffHours = (diffMs / (1000*60*60)).toInteger()
-                    def diffMinutes = ((diffMs / (1000*60)) % 60).toInteger()
+                    def totalMinutes = (diffMs / (1000*60)).toInteger()
+                    def diffHours = totalMinutes / 60
+                    def diffMinutes = totalMinutes % 60
                     lastReportStr = ""
                     if(diffHours > 0) lastReportStr += "${diffHours}h "
                     lastReportStr += "${diffMinutes}m ago"
@@ -464,7 +468,6 @@ def summaryPage(){
         }
     }
 }
-
 // --- Battery Trends Page ---
 def trendsPage(){
     dynamicPage(name:"trendsPage",title:"Battery Trends",install:false){
@@ -480,15 +483,17 @@ def trendsPage(){
             devs.each{ device ->
                 def level=device.currentValue("battery")?.toInteger() ?: 100
                 def color=getBatteryLevelDisplay(level, device)
-                def drainStr=String.format('%.2f',getDrain(device))
-                def trendStr=state.trend?.get(device.id) ?: 'Stable'
+                def drain=getDrain(device)
+                def trend=state.trend?.get(device.id) ?: 'Stable'
 
+                // ===== Last Report in hours/minutes
                 def lastReport = state.history[device.id]?.lastDate
                 def lastReportStr = "N/A"
                 if(lastReport){
                     def diffMs = now() - lastReport
-                    def diffHours = (diffMs / (1000*60*60)).toInteger()
-                    def diffMinutes = ((diffMs / (1000*60)) % 60).toInteger()
+                    def totalMinutes = (diffMs / (1000*60)).toInteger()
+                    def diffHours = totalMinutes / 60
+                    def diffMinutes = totalMinutes % 60
                     lastReportStr = ""
                     if(diffHours > 0) lastReportStr += "${diffHours}h "
                     lastReportStr += "${diffMinutes}m ago"
@@ -497,8 +502,8 @@ def trendsPage(){
                 table+="<tr>"
                 table+="<td>${device.displayName}</td>"
                 table+="<td>${color}</td>"
-                table+="<td>${drainStr}</td>"
-                table+="<td>${trendStr}</td>"
+                table+="<td>${String.format('%.2f',drain)}</td>"
+                table+="<td>${trend}</td>"
                 table+="<td>${lastReportStr}</td>"
                 table+="</tr>"
             }

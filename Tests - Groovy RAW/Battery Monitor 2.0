@@ -211,6 +211,15 @@ def updateBattery(device, level){
         data = state.history[device.id]
     }
 
+    // =========================
+    // 🔥 FORCE SANITY CHECK
+    // =========================
+    if(level >= 90 && data?.lastLevel <= 50 && data?.lastDate){
+        def hoursSinceLast = (now() - data.lastDate) / (1000*60*60)
+        if(hoursSinceLast >= 24){
+            detectReplacement(device, level, data.lastLevel)
+        }
+    }
     detectReplacement(device, level, data.lastLevel)
 
     def replacedAt = data.replacedTime ?: now()
@@ -264,14 +273,70 @@ def detectReplacement(device, newLevel, oldLevel){
 
     def data = state.history[device.id]
 
-    def largeJump = (newLevel - oldLevel) >= 40
+    def largeJump = (newLevel - oldLevel)
+    def hadDrainHistory = data?.samples && data.samples.size() >= 2
 
-    if((newLevel >= 95 && oldLevel <= 40) || (newLevel >= 95 && largeJump)){
+    def detected = false
+    def confidence = "LOW"
+
+    // =====================
+    // ✅ Tier 1: Strong signal
+    // =====================
+    if(newLevel >= 95 && oldLevel <= 40){
+        detected = true
+        confidence = "HIGH"
+    }
+
+    // =====================
+    // ✅ Tier 2: Relaxed threshold
+    // =====================
+    else if(newLevel >= 90 && oldLevel <= 50 && largeJump >= 25){
+        detected = true
+        confidence = "MEDIUM"
+    }
+
+    // =====================
+    // ✅ Tier 3: Smart recovery
+    // =====================
+    else if(newLevel >= 90 && hadDrainHistory && largeJump >= 15){
+        detected = true
+        confidence = "LOW"
+    }
+
+    // =====================
+    // ✅ Tier 4: Step reporting recovery
+    // =====================
+    else if(newLevel >= 95 && hadDrainHistory && oldLevel >= 60){
+        detected = true
+        confidence = "LOW"
+    }
+
+    // =====================
+    // 🚫 DUPLICATE PROTECTION
+    // =====================
+    if(detected){
+        def nowTime = now()
+
+        def recent = state.replacements?.find{
+            it.device == device.displayName &&
+            (nowTime - Date.parse("yyyy-MM-dd HH:mm", it.date).time) < (1000*60*60*12) &&
+            Math.abs((it.level ?: 100) - newLevel) <= 5
+        }
+
+        if(recent){
+            // Skip duplicate
+            return
+        }
+
+        // =====================
+        // ✅ LOG REPLACEMENT
+        // =====================
         state.replacements << [
             device: device.displayName,
             level: newLevel,
             date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-            manual: false
+            manual: false,
+            confidence: confidence
         ]
 
         data.drain = 0.3
@@ -283,7 +348,6 @@ def detectReplacement(device, newLevel, oldLevel){
         data.replacedTime = now()
     }
 }
-
 // =====================
 // TREND LOGIC (Heavy User / Auto-Adjust)
 // =====================
@@ -458,7 +522,7 @@ def historyPage(){
             table += "<tr><td colspan='4' style='font-weight:bold; padding-bottom:5px;'>" +
                      "<span style='color:green;'>A</span> = Auto replacement &nbsp;&nbsp; " +
                      "<span style='color:blue;'>M</span> = Manual replacement</td></tr>"
-            table += "<tr style='font-weight:bold; border-bottom:1px solid #000;'><td>Date</td><td>Device</td><td>Level</td><td>Type</td></tr>"
+            table += "<tr style='font-weight:bold; border-bottom:1px solid #000;'><td>Date</td><td>Device</td><td>Level</td><td>Type</td><td>Confidence</td></tr>"
 
             latestReps.each{ r ->
                 def deviceObj = autoDevices.find{ it.displayName == r.device }
@@ -471,7 +535,8 @@ def historyPage(){
                 table += "<td>${r.device}</td>"
                 table += "<td>${level}%</td>"
                 table += "<td>${typeCode}</td>"
-                table += "</tr>"
+                table += "<td>${r.confidence ?: (r.manual ? 'Manual' : '—')}</td>"
+                table += "</tr>">"
             }
             table += "</table>"
 

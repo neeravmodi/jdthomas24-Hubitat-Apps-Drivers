@@ -176,29 +176,10 @@ def shouldRunWeekly(){
 // =====================
 // BATTERY HANDLER
 // =====================
-def scheduleScan(){
-    switch(scanInterval){
-        case "1": runEvery1Hour(scanBatteries); break
-        case "3": runEvery3Hours(scanBatteries); break
-        case "6": runEvery6Hours(scanBatteries); break
-    }
-}
-
-def scanBatteries(){
-    autoDevices.each{ device ->
-        def level=device.currentValue("battery")?.toInteger()
-        if(level!=null) updateBattery(device,level)
-    }
-}
-
-def batteryHandler(evt){
-    def level=evt.value?.toInteger()
-    if(level!=null) updateBattery(evt.device,level)
-}
-
 def updateBattery(device, level){
     def data = state.history[device.id]
 
+    // Initialize history entry if missing
     if(!data){
         state.history[device.id] = [
             lastLevel: level ?: 100,
@@ -211,27 +192,27 @@ def updateBattery(device, level){
         data = state.history[device.id]
     }
 
-    // =========================
-    // 🔥 FORCE SANITY CHECK
-    // =========================
+    // 🔥 FORCE SANITY CHECK FOR SUDDEN HIGH BATTERY
     if(level >= 90 && data?.lastLevel <= 50 && data?.lastDate){
         def hoursSinceLast = (now() - data.lastDate) / (1000*60*60)
         if(hoursSinceLast >= 24){
             detectReplacement(device, level, data.lastLevel)
         }
     }
+
+    // Always check for possible replacement
     detectReplacement(device, level, data.lastLevel)
 
+    // Clear justReplaced flag after 24h
     def replacedAt = data.replacedTime ?: now()
     if(data.justReplaced && (now() - replacedAt) > 1000*60*60*24){
         data.justReplaced = false
     }
 
+    // Update drain based on lastLevel and samples
     def days = (now() - data.lastDate) / (1000*60*60*24)
-
     if(days > 0 && !data.justReplaced){
         def drain = (data.lastLevel - level) / days
-
         if(drain > 0 && drain < 5){
             data.samples << drain
             if(data.samples.size() > 5) data.samples.remove(0)
@@ -244,6 +225,7 @@ def updateBattery(device, level){
         }
     }
 
+    // Update lastLevel and lastDate after drain calculation
     data.lastLevel = level
     data.lastDate = now()
 
@@ -254,7 +236,7 @@ def updateBattery(device, level){
 }
 
 // =====================
-// BATTERY REPLACEMENT
+// BATTERY REPLACEMENT DETECTION
 // =====================
 def detectReplacement(device, newLevel, oldLevel){
     newLevel = newLevel ?: 100
@@ -273,6 +255,11 @@ def detectReplacement(device, newLevel, oldLevel){
 
     def data = state.history[device.id]
 
+    // 🚫 HARD DUPLICATE LOCK (per device, 24h)
+    if(data?.lastReplacementLogged && (now() - data.lastReplacementLogged) < (1000*60*60*24)){
+        return
+    }
+
     def largeJump = (newLevel - oldLevel)
     def hadDrainHistory = data?.samples && data.samples.size() >= 2
 
@@ -286,7 +273,6 @@ def detectReplacement(device, newLevel, oldLevel){
         detected = true
         confidence = "HIGH"
     }
-
     // =====================
     // ✅ Tier 2: Relaxed threshold
     // =====================
@@ -294,7 +280,6 @@ def detectReplacement(device, newLevel, oldLevel){
         detected = true
         confidence = "MEDIUM"
     }
-
     // =====================
     // ✅ Tier 3: Smart recovery
     // =====================
@@ -302,7 +287,6 @@ def detectReplacement(device, newLevel, oldLevel){
         detected = true
         confidence = "LOW"
     }
-
     // =====================
     // ✅ Tier 4: Step reporting recovery
     // =====================
@@ -312,7 +296,7 @@ def detectReplacement(device, newLevel, oldLevel){
     }
 
     // =====================
-    // 🚫 DUPLICATE PROTECTION
+    // 🚫 DUPLICATE PROTECTION + LOGGING
     // =====================
     if(detected){
         def nowTime = now()
@@ -323,14 +307,9 @@ def detectReplacement(device, newLevel, oldLevel){
             Math.abs((it.level ?: 100) - newLevel) <= 5
         }
 
-        if(recent){
-            // Skip duplicate
-            return
-        }
+        if(recent) return
 
-        // =====================
-        // ✅ LOG REPLACEMENT
-        // =====================
+        // Log replacement
         state.replacements << [
             device: device.displayName,
             level: newLevel,
@@ -339,15 +318,22 @@ def detectReplacement(device, newLevel, oldLevel){
             confidence: confidence
         ]
 
+        // Reset drain & samples
         data.drain = 0.3
         data.samples = []
         state.trend[device.id] = "Stable"
+
+        // Update history
         data.lastLevel = newLevel
         data.lastDate = now()
         data.justReplaced = true
         data.replacedTime = now()
+
+        // ✅ Update lastReplacementLogged AFTER replacement
+        data.lastReplacementLogged = now()
     }
 }
+
 // =====================
 // TREND LOGIC (Heavy User / Auto-Adjust)
 // =====================
@@ -515,13 +501,13 @@ def historyPage(){
                 return
             }
 
-            latestReps = latestReps.sort{ a,b ->
-            Date.parse("yyyy-MM-dd HH:mm", b.date) <=> Date.parse("yyyy-MM-dd HH:mm", a.date)
+            def latestReps = (state.replacements ?: []).sort{ a,b ->
+    Date.parse("yyyy-MM-dd HH:mm", b.date) <=> Date.parse("yyyy-MM-dd HH:mm", a.date)
 }
 
 
             def table = "<table style='width:100%; border-collapse: collapse;'>"
-            table += "<tr><td colspan='4' style='font-weight:bold; padding-bottom:5px;'>" +
+            table += "<tr><td colspan='5' style='font-weight:bold; padding-bottom:5px;'>" +
                      "<span style='color:green;'>A</span> = Auto replacement &nbsp;&nbsp; " +
                      "<span style='color:blue;'>M</span> = Manual replacement</td></tr>"
             table += "<tr style='font-weight:bold; border-bottom:1px solid #000;'><td>Date</td><td>Device</td><td>Level</td><td>Type</td><td>Confidence</td></tr>"
@@ -538,7 +524,7 @@ def historyPage(){
                 table += "<td>${level}%</td>"
                 table += "<td>${typeCode}</td>"
                 table += "<td>${r.confidence ?: (r.manual ? 'Manual' : '—')}</td>"
-                table += "</tr>">"
+                table += "</tr>"
             }
             table += "</table>"
 
@@ -611,6 +597,8 @@ def manualReplacementConfirmPage() {
                         state.history[dev.id].lastDate = now()
                         state.history[dev.id].justReplaced = true
                         state.history[dev.id].replacedTime = now()
+                        state.history[dev.id].lastReplacementLogged = now()
+                        
                     }
                 }
 

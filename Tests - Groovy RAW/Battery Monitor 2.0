@@ -103,6 +103,20 @@ def updated(){
 
 def initialize(){
     if(!state.history) state.history=[:]
+    
+    // ✅ CLEAN UP DUPLICATES IN REPLACEMENTS (KEEP LATEST PER DEVICE+DATE)
+    if(state.replacements){
+        def deduped = [:]  // key = device+date
+        state.replacements.each { r ->
+            def key = "${r.device}-${r.date}"
+            // Keep only the latest occurrence
+            deduped[key] = r
+        }
+        state.replacements = deduped.values().sort{ a,b -> 
+            Date.parse("yyyy-MM-dd HH:mm", b.date) <=> Date.parse("yyyy-MM-dd HH:mm", a.date)
+        }
+    }
+    
     if(!state.trend) state.trend=[:]
     if(!state.replacements) state.replacements=[]
 
@@ -114,11 +128,14 @@ def initialize(){
         }
     }
 
+    // Subscribe to battery events
     subscribe(autoDevices,"battery",batteryHandler)
 
+    // Schedule scans and reports
     scheduleScan()
     scheduleReportFrequency()
 
+    // Initialize history for each device if missing
     autoDevices.each{ device ->
         if(!state.history[device.id]){
             def level=device.currentValue("battery")?.toInteger() ?:100
@@ -236,7 +253,7 @@ def updateBattery(device, level){
 }
 
 // =====================
-// BATTERY REPLACEMENT DETECTION
+// BATTERY REPLACEMENT DETECTION (FIXED)
 // =====================
 def detectReplacement(device, newLevel, oldLevel){
     newLevel = newLevel ?: 100
@@ -255,63 +272,24 @@ def detectReplacement(device, newLevel, oldLevel){
 
     def data = state.history[device.id]
 
-    // 🚫 HARD DUPLICATE LOCK (per device, 24h)
-    if(data?.lastReplacementLogged && (now() - data.lastReplacementLogged) < (1000*60*60*24)){
-        return
-    }
-
     def largeJump = (newLevel - oldLevel)
     def hadDrainHistory = data?.samples && data.samples.size() >= 2
-
     def detected = false
-    def confidence = "LOW"
 
     // =====================
-// ✅ Tier 1: Strong signal
-// =====================
-if(newLevel >= 95 && oldLevel <= 40){
-    detected = true
-    confidence = "HIGH"
-}
-// =====================
-// ✅ Tier 2: Relaxed threshold (adjusted to ≤40%)
-// =====================
-else if(newLevel >= 90 && oldLevel <= 40 && largeJump >= 25){
-    detected = true
-    confidence = "MEDIUM"
-}
-// =====================
-// ✅ Tier 3: Smart recovery
-// =====================
-else if(newLevel >= 90 && hadDrainHistory && largeJump >= 15 && oldLevel <= 40){
-    detected = true
-    confidence = "LOW"
-}
-// =====================
-// ✅ Tier 4: Step reporting recovery (adjusted to ≤40%)
-// =====================
-else if(newLevel >= 95 && hadDrainHistory && oldLevel <= 40){
-    detected = true
-    confidence = "LOW"
-}
+    // Tier 1: Strong signal
     // =====================
-    // 🚫 DUPLICATE PROTECTION + LOGGING
-    // =====================
+    if(newLevel >= 95 && oldLevel <= 40) detected = true
+    // Tier 2: Relaxed threshold
+    else if(newLevel >= 90 && oldLevel <= 40 && largeJump >= 25) detected = true
+    // Tier 3: Smart recovery
+    else if(newLevel >= 90 && hadDrainHistory && largeJump >= 15 && oldLevel <= 40) detected = true
+    // Tier 4: Step reporting recovery
+    else if(newLevel >= 95 && hadDrainHistory && oldLevel <= 40) detected = true
+
     if(detected){
-        def nowTime = now()
-
-        def recent = state.replacements?.find{
-            it.device == device.displayName &&
-            (nowTime - Date.parse("yyyy-MM-dd HH:mm", it.date).time) < (1000*60*60*12) &&
-            Math.abs((it.level ?: 100) - newLevel) <= 5
-        }
-
-        if(recent) return
-
+        // ✅ Unified logReplacement overwrites duplicates automatically
         logReplacement(device, newLevel, false)
-
-        // ✅ Update lastReplacementLogged AFTER replacement
-        data.lastReplacementLogged = now()
     }
 }
 
@@ -390,6 +368,8 @@ def getBatteryLevelDisplay(level, device=null){
 // =====================
 def logReplacement(device, newLevel, manual=false){
     if(!device) return
+
+    // Ensure history exists
     def data = state.history[device.id]
     if(!data){
         state.history[device.id] = [
@@ -413,21 +393,18 @@ def logReplacement(device, newLevel, manual=false){
     state.trend[device.id] = "Stable"
     data.lastReplacementLogged = now()
 
-    // ✅ Add or overwrite in replacements log
-    def existing = state.replacements?.find{ it.device == device.displayName }
-    if(existing){
-        existing.level = newLevel
-        existing.date = new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
-        existing.manual = manual
-    } else {
-        state.replacements << [
-            device: device.displayName,
-            level: newLevel,
-            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-            manual: manual
-        ]
-    }
+    // ✅ Remove old duplicates for this device
+    state.replacements = state.replacements?.findAll{ it.device != device.displayName } ?: []
+
+    // ✅ Add the new replacement entry
+    state.replacements << [
+        device: device.displayName,
+        level: newLevel,
+        date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
+        manual: manual
+    ]
 }
+
 // =====================
 // PAGES
 // =====================
@@ -625,14 +602,15 @@ def manualReplacementConfirmPage() {
                             ]
                         }
 
-                       logReplacement(dev, dev.currentValue("battery")?.toInteger() ?: 100, true)
+                        // Log replacement (auto overwrites any previous entry for this device)
+                        logReplacement(dev, dev.currentValue("battery")?.toInteger() ?: 100, true)
                     }
                 }
 
-                // Display success message first
+                // Display success message
                 paragraph "✅ Done! Manual replacement registered."
 
-                // ✅ Clear selection reliably after 1 second
+                // ✅ Clear selection reliably after processing
                 runIn(1) {
                     app.updateSetting("replaceDevicesManual", [value:[], type:"enum"])
                 }

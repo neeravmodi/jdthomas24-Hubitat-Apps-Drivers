@@ -22,7 +22,6 @@ preferences {
     page(name:"summaryPage")
     page(name:"trendsPage")
     page(name:"historyPage")
-    page(name:"replacementPage")
     page(name:"manualReplacementPage")
     page(name:"manualReplacementConfirmPage")
     page(name:"infoPage")
@@ -79,12 +78,12 @@ def mainPage(){
             input "notifyDevices","capability.notification",title:"Notification devices",multiple:true,required:false
         }
 
-        section("Reports"){
-            href "summaryPage",title:"Battery Summary"
-            href "trendsPage",title:"Battery Trends"
-            href "historyPage",title:"Battery Replacement History"
-            href "replacementPage",title:"Manual Battery Replacement"
-        }
+       section("Reports"){
+           href "summaryPage",title:"Battery Summary"
+           href "trendsPage",title:"Battery Trends"
+           href "historyPage",title:"Battery Replacement History"
+           href "manualReplacementPage", title:"Manual Battery Replacement"  // updated
+}
 
         section("Help & Info"){
             href "infoPage",

@@ -308,25 +308,7 @@ else if(newLevel >= 95 && hadDrainHistory && oldLevel <= 40){
 
         if(recent) return
 
-        // Log replacement
-        state.replacements << [
-            device: device.displayName,
-            level: newLevel,
-            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-            manual: false,
-            confidence: confidence
-        ]
-
-        // Reset drain & samples
-        data.drain = 0.3
-        data.samples = []
-        state.trend[device.id] = "Stable"
-
-        // Update history
-        data.lastLevel = newLevel
-        data.lastDate = now()
-        data.justReplaced = true
-        data.replacedTime = now()
+        logReplacement(device, newLevel, false)
 
         // ✅ Update lastReplacementLogged AFTER replacement
         data.lastReplacementLogged = now()
@@ -403,7 +385,49 @@ def getBatteryLevelDisplay(level, device=null){
 
     return label
 }
+// =====================
+// BATTERY REPLACEMENT LOGGER (HELPER)
+// =====================
+def logReplacement(device, newLevel, manual=false){
+    if(!device) return
+    def data = state.history[device.id]
+    if(!data){
+        state.history[device.id] = [
+            lastLevel: newLevel ?: 100,
+            lastDate: now(),
+            drain: 0.3,
+            samples: [],
+            justReplaced: false
+        ]
+        data = state.history[device.id]
+        state.trend[device.id] = "Stable"
+    }
 
+    // Reset history for replacement
+    data.drain = 0.3
+    data.samples = []
+    data.lastLevel = newLevel
+    data.lastDate = now()
+    data.justReplaced = true
+    data.replacedTime = now()
+    state.trend[device.id] = "Stable"
+    data.lastReplacementLogged = now()
+
+    // ✅ Add or overwrite in replacements log
+    def existing = state.replacements?.find{ it.device == device.displayName }
+    if(existing){
+        existing.level = newLevel
+        existing.date = new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
+        existing.manual = manual
+    } else {
+        state.replacements << [
+            device: device.displayName,
+            level: newLevel,
+            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
+            manual: manual
+        ]
+    }
+}
 // =====================
 // PAGES
 // =====================
@@ -601,22 +625,7 @@ def manualReplacementConfirmPage() {
                             ]
                         }
 
-                        // Add manual replacement to state
-                        state.replacements << [
-                            device: dev.displayName,
-                            level: dev.currentValue("battery")?.toInteger() ?: 100,
-                            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-                            manual: true
-                        ]
-
-                        // Update device history & trend
-                        state.history[dev.id].drain = 0.3
-                        state.trend[dev.id] = "Stable"
-                        state.history[dev.id].lastLevel = dev.currentValue("battery")?.toInteger() ?: 100
-                        state.history[dev.id].lastDate = now()
-                        state.history[dev.id].justReplaced = true
-                        state.history[dev.id].replacedTime = now()
-                        state.history[dev.id].lastReplacementLogged = now()
+                       logReplacement(dev, dev.currentValue("battery")?.toInteger() ?: 100, true)
                     }
                 }
 

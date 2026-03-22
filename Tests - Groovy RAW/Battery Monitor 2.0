@@ -408,6 +408,7 @@ def getBatteryLevelDisplay(level, device=null){
 
     return label
 }
+
 // =====================
 // BATTERY REPLACEMENT LOGGER (HELPER)
 // =====================
@@ -449,32 +450,40 @@ def logReplacement(device, newLevel, manual=false){
         manual: manual
     ]
 }
+
 // =====================
 // STALE + TIMING HELPERS
 // =====================
-def getLastBatteryTime(device){
-    return state.history[device.id]?.lastDate
-}
-
-def getLastActivityTime(device){
-    return device.getLastActivity()
-}
-
+def getLastBatteryTime(device){ return state.history[device.id]?.lastDate }
+def getLastActivityTime(device){ return device.getLastActivity() }
 def isStale(device){
     def lastBattery = getLastBatteryTime(device)
     def lastActivity = getLastActivityTime(device)
-
     if(!lastBattery || !lastActivity) return false
-
     def diffHours = (lastActivity - lastBattery) / (1000*60*60)
     return diffHours >= 24
 }
+def formatTimeAgo(ts){ if(!ts) return "N/A"; def diffMs = now() - ts; def mins = (diffMs / (1000*60)).toInteger(); return mins < 60 ? "${mins}m ago" : "${(mins/60).toInteger()}h ago" }
 
-def formatTimeAgo(ts){
-    if(!ts) return "N/A"
-    def diffMs = now() - ts
-    def mins = (diffMs / (1000*60)).toInteger()
-    return mins < 60 ? "${mins}m ago" : "${(mins/60).toInteger()}h ago"
+// =====================
+// HELPER FUNCTIONS (SAFE ACCESS)
+// =====================
+def safeHistory(device){
+    if(!state.history[device.id]){
+        state.history[device.id] = [
+            lastLevel: device.currentValue("battery")?.toInteger() ?:100,
+            lastDate: now(),
+            drain:0.3,
+            samples:[],
+            justReplaced:false
+        ]
+        state.trend[device.id] = "Stable"
+    }
+    return state.history[device.id]
+}
+
+def safeParseDate(str){
+    try{ return Date.parse("yyyy-MM-dd HH:mm", str) } catch(e){ return new Date(0) }
 }
 
 // --- Battery Summary Page ---

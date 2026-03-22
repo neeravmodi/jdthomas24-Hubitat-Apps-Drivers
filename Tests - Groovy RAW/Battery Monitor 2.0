@@ -193,6 +193,14 @@ def shouldRunWeekly(){
 // =====================
 // BATTERY HANDLER
 // =====================
+def batteryHandler(evt){
+    def device = evt.device
+    def level = evt.value?.toInteger()
+    if(device && level != null){
+        updateBattery(device, level)
+    }
+}
+
 def updateBattery(device, level){
     def data = state.history[device.id]
 
@@ -207,6 +215,15 @@ def updateBattery(device, level){
         ]
         state.trend[device.id] = "Stable"
         data = state.history[device.id]
+    }
+
+    // 🔥 CRITICAL FIX: Handle 0% battery correctly
+    if(level == 0){
+        data.justReplaced = false
+        data.replacedTime = null
+        data.drain = 1.0
+        data.samples = []
+        state.trend[device.id] = "Heavy Drain"
     }
 
     // 🔥 FORCE SANITY CHECK FOR SUDDEN HIGH BATTERY
@@ -338,6 +355,12 @@ def health(device){
 // =====================
 def getBatteryLevelDisplay(level, device=null){
     level = (level instanceof Number ? level : null) ?: 100
+
+    // 🔥 Hide "Recently Replaced" if battery is 0%
+    if(level == 0){
+        def data = device ? state.history[device.id] : null
+        if(data) data.justReplaced = false
+    }
 
     def label = ""
     if(level<=25) label = "🔴 ${level}%"

@@ -613,56 +613,46 @@ def manualReplacementPage(){
     dynamicPage(name:"manualReplacementPage", title:"Manual Battery Replacement", install:false){
         section("Select a device to log a manual battery replacement"){
 
-            // Safe list of devices with battery capability
             def deviceOptions = (autoDevices ?: []).findAll{ it != null }*.displayName
-
             if(!deviceOptions || deviceOptions.size() == 0){
                 paragraph "⚠ No battery devices available. Please select devices on the main page first."
                 return
             }
 
-            // Device selection input
-            input "manualDevice","enum",
-                  title:"Select Device",
-                  options:deviceOptions,
-                  required:true,
-                  submitOnChange:true
-
-            // Persist selection in state for confirm page
-            if(manualDevice){
-                state.manualReplacementDevice = manualDevice
-            }
+            // Use settings.manualDevice to persist selection
+            input "manualDevice", "enum",
+                  title: "Select Device",
+                  options: deviceOptions,
+                  required: true,
+                  submitOnChange: true
 
             // Only show battery level input after a device is selected
-            if(manualDevice){
-                input "manualLevel","number",
-                      title:"Battery Level After Replacement",
-                      defaultValue:100,
-                      range:0..100,
-                      required:true,
-                      submitOnChange:true
+            if(settings.manualDevice){
+                input "manualLevel", "number",
+                      title: "Battery Level After Replacement",
+                      defaultValue: 100,
+                      range: 0..100,
+                      required: true,
+                      submitOnChange: true
 
-                // Persist battery level in state
-                if(manualLevel != null){
-                    state.manualReplacementLevel = manualLevel.toInteger()
+                // Show confirm button only when both inputs are selected
+                if(settings.manualLevel != null){
+                    href "manualReplacementConfirmPage",
+                         title: "Confirm Replacement",
+                         description: "Click to log manual replacement"
                 }
-
-                // Link to confirm page
-                href "manualReplacementConfirmPage",
-                     title:"Confirm Replacement",
-                     description:"Click to log manual replacement"
             }
         }
     }
 }
 
-// ===================== CONFIRMATION PAGE ====================
+// ===================== MANUAL REPLACEMENT CONFIRM =======================
 def manualReplacementConfirmPage(){
     dynamicPage(name:"manualReplacementConfirmPage", title:"Confirm Manual Replacement", install:false){
         section("Confirm Replacement"){
 
-            def selectedDeviceName = state.manualReplacementDevice
-            def selectedLevel = state.manualReplacementLevel
+            def selectedDeviceName = settings.manualDevice
+            def selectedLevel = settings.manualLevel?.toInteger()
 
             if(!selectedDeviceName){
                 paragraph "❌ No device selected. Go back and select a device first."
@@ -677,25 +667,24 @@ def manualReplacementConfirmPage(){
             def device = (autoDevices ?: []).find{ it.displayName == selectedDeviceName }
 
             if(device){
-                // Log the replacement safely
                 logReplacement(device, selectedLevel, true)
                 paragraph "✅ Manual replacement logged for ${device.displayName} at ${selectedLevel}%."
-                
-                // Clear state after logging to prevent stale selections
+
+                // Clear both settings and state to prevent stale values
+                app.updateSetting("manualDevice",[value:null,type:"enum"])
+                app.updateSetting("manualLevel",[value:null,type:"number"])
                 state.manualReplacementDevice = null
                 state.manualReplacementLevel = null
             } else {
                 paragraph "❌ Device not found. Please go back and select a valid device."
             }
 
-            // Back link for navigation
             href "manualReplacementPage",
                  title:"← Back",
                  description:"Return to Manual Replacement page"
         }
     }
 }
-
 // ============================================================
 // ===================== INFO PAGE ===========================
 // ============================================================

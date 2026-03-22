@@ -371,26 +371,9 @@ def health(device){
     if(drain<1.2) return "Fair"
     return "Poor"
 }
+
 // =====================
-// SAFE HISTORY HELPER (DROP-IN FIX)
-// =====================
-def safeHistory(device){
-    if(!device) return [:]               // device is null, return empty map
-    if(!state.history) state.history=[:] // ensure history exists
-    if(!state.history[device.id]){
-        state.history[device.id]=[       // initialize a default map for this device
-            lastLevel: device.currentValue("battery")?.toInteger() ?: 100,
-            lastDate: now(),
-            drain: 0.3,
-            samples: [],
-            justReplaced: false
-        ]
-        state.trend[device.id] = "Stable"
-    }
-    return state.history[device.id]
-}
-// =====================
-// BATTERY DISPLAY HELPERS + SAFE HISTORY
+// SAFE HISTORY & TIMING HELPERS (CLEANED)
 // =====================
 def safeHistory(device){
     if(!device) return [:]
@@ -424,7 +407,7 @@ def isStale(device){
     def lastBattery = getLastBatteryTime(device)
     def lastActivity = getLastActivityTime(device)
     if(!lastBattery || !lastActivity) return false
-    def diffHours = (lastActivity - lastBattery) / (1000*60*60)
+    def diffHours = (lastActivity.time - lastBattery.time) / (1000*60*60)
     return diffHours >= 24
 }
 
@@ -436,10 +419,11 @@ def formatTimeAgo(ts){
     return mins < 60 ? "${mins}m ago" : "${(mins/60).toInteger()}h ago"
 }
 
+// =====================
+// BATTERY DISPLAY HELPERS
+// =====================
 def getBatteryLevelDisplay(level, device=null){
     level = (level instanceof Number ? level : null) ?: 100
-
-    // 🔥 Hide "Recently Replaced" if battery is 0%
     if(level == 0){
         def data = device ? safeHistory(device) : null
         if(data) data.justReplaced = false
@@ -458,7 +442,7 @@ def getBatteryLevelDisplay(level, device=null){
         replacedTime = (replacedTime instanceof Number) ? replacedTime : now()
         def hoursSinceReplacement = (now() - replacedTime) / (1000*60*60)
         if(hoursSinceReplacement >= 24){
-            if(data) data.justReplaced = false    // Clear flag after 24h
+            if(data) data.justReplaced = false
             showTag = false
         }
     }
@@ -471,12 +455,11 @@ def getBatteryLevelDisplay(level, device=null){
 }
 
 // =====================
-// BATTERY REPLACEMENT LOGGER (HELPER)
+// BATTERY REPLACEMENT LOGGER
 // =====================
 def logReplacement(device, newLevel, manual=false){
     if(!device) return
 
-    // Ensure history exists
     def data = state.history[device.id]
     if(!data){
         state.history[device.id] = [
@@ -490,7 +473,6 @@ def logReplacement(device, newLevel, manual=false){
         state.trend[device.id] = "Stable"
     }
 
-    // Reset history for replacement
     data.drain = 0.3
     data.samples = []
     data.lastLevel = newLevel
@@ -500,10 +482,8 @@ def logReplacement(device, newLevel, manual=false){
     state.trend[device.id] = "Stable"
     data.lastReplacementLogged = now()
 
-    // ✅ Remove old duplicates for this device
     state.replacements = state.replacements?.findAll{ it.device != device.displayName } ?: []
 
-    // ✅ Add the new replacement entry
     state.replacements << [
         device: device.displayName,
         level: newLevel,
@@ -511,36 +491,6 @@ def logReplacement(device, newLevel, manual=false){
         manual: manual
     ]
 }
-
-// =====================
-// STALE + TIMING HELPERS
-// =====================
-def getLastBatteryTime(device){
-    return state.history[device.id]?.lastDate
-}
-
-def getLastActivityTime(device){
-    return device.getLastActivity()
-}
-
-def isStale(device){
-    def lastBattery = getLastBatteryTime(device)
-    def lastActivity = getLastActivityTime(device)
-
-    if(!lastBattery || !lastActivity) return false
-
-    // ✅ Fixed minus() error
-    def diffHours = (lastActivity.time - lastBattery.time) / (1000*60*60)
-    return diffHours >= 24
-}
-
-def formatTimeAgo(ts){
-    if(!ts) return "N/A"
-    def diffMs = now() - ts
-    def mins = (diffMs / (1000*60)).toInteger()
-    return mins < 60 ? "${mins}m ago" : "${(mins/60).toInteger()}h ago"
-}
-
 // --- Battery Summary Page ---
 def summaryPage(){
     dynamicPage(name:"summaryPage",title:"Battery Summary",install:false){

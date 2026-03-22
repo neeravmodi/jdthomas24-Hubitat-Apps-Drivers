@@ -549,18 +549,21 @@ def trendsPage(){
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Trend</td><td>Avg Drain</td>"
+            table+="<td>Device</td><td>Battery</td><td>Trend</td><td>Day Drain</td>"
             table+="</tr>"
 
             devs.each{ device ->
                 def hist = safeHistory(device)
                 def drain = getDrain(device)
                 def trend = state.trend[device.id] ?: "Unknown"
+                def level = device.currentValue("battery")?.toInteger() ?: 100
+                def color = getBatteryLevelDisplay(level, device)
 
                 table+="<tr>"
                 table+="<td>${device.displayName}</td>"
+                table+="<td>${color}</td>"
                 table+="<td>${trend}</td>"
-                table+="<td>${String.format('%.2f',drain)}</td>"
+                table+="<td>${String.format('%.2f', drain)}</td>"
                 table+="</tr>"
             }
 

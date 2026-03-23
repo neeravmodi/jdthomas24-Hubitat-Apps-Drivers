@@ -328,8 +328,8 @@ def detectReplacement(device, newLevel, oldLevel){
     else if(newLevel >= 95 && hadDrainHistory && oldLevel <= 40) detected = true
 
     if(detected){
-        logReplacement(device, newLevel, false)
-    }
+    logReplacement(device, newLevel, false, "auto") // tag as auto
+   }
 }
 
 // ============================================================
@@ -481,11 +481,11 @@ def logReplacement(device, newLevel, manual=false){
     state.replacements = state.replacements?.findAll{ it.device != device.displayName } ?: []
 
     state.replacements << [
-        device: device.displayName,
-        level: newLevel,
-        date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-        manual: manual
-    ]
+    device: device.displayName,
+    level: level,
+    date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
+    type: manual ? "manual" : "auto"  // <-- colored M/A later
+   ]
 }
 
 // ============================================================
@@ -590,13 +590,15 @@ def historyPage(){
             table+="</tr>"
 
             state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->
-                table+="<tr>"
-                table+="<td>${r.device}</td>"
-                table+="<td>${r.level}%</td>"
-                table+="<td>${r.date}</td>"
-                table+="<td>${r.manual ? 'Yes' : 'No'}</td>"
-                table+="</tr>"
-            }
+            def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
+                  r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
+            table+="<tr>"
+            table+="<td>${r.device}</td>"
+            table+="<td>${r.level}%</td>"
+            table+="<td>${r.date}</td>"
+            table+="<td>${typeTag}</td>"
+           table+="</tr>"
+        }
 
             table+="</table>"
             paragraph table
@@ -670,9 +672,10 @@ def manualReplacementConfirmPage() {
 
                         // Log replacement
                         state.replacements << [
-                            device: device.displayName,
-                            level: level,
-                            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone)
+                        device: device.displayName,
+                        level: level,
+                        date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
+                        type: "manual"  // tag as manual
                         ]
                         state.history[device.id].drain = 0.3
                         state.trend[device.id] = "Stable"

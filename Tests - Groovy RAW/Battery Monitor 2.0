@@ -17,6 +17,20 @@ definition(
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     version: "2.3.3"
 )
+def installed() {
+    log.debug "Installed - initializing app"
+    initialize()
+}
+
+def updated() {
+    log.debug "Updated - re-initializing app"
+    unschedule()
+    initialize()
+}
+
+def initialize() {
+    log.debug "Initialization complete"
+}
 
 preferences {
     page(name:"mainPage")

@@ -568,12 +568,18 @@ def trendsPage(){
         section("Battery Trends"){
             def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
 
-            // ✅ SORT ALPHABETICALLY BY DEVICE NAME
-            devs = devs.sort { a, b -> a.displayName.toLowerCase() <=> b.displayName.toLowerCase() }
-
             if(!devs){
                 paragraph "No battery devices found for trends."
                 return
+            }
+
+            // Sort by worst battery first using same color thresholds
+            devs = devs.sort { a, b ->
+                def levelA = a.currentValue("battery")?.toInteger() ?: 100
+                def levelB = b.currentValue("battery")?.toInteger() ?: 100
+
+                // Lower battery first
+                levelA <=> levelB
             }
 
             // Start table
@@ -587,6 +593,8 @@ def trendsPage(){
                 def level = device.currentValue("battery")?.toInteger() ?: 100
                 def drain = hist?.drain ?: 0.3
                 def trend = state.trend[device.id] ?: "Unknown"
+
+                // Use the same color codes as summary notifications
                 def color = getBatteryLevelDisplay(level, device)
 
                 table+="<tr>"
@@ -602,7 +610,6 @@ def trendsPage(){
         }
     }
 }
-
 // ============================================================
 // ===================== HISTORY PAGE ========================
 // ============================================================

@@ -1,6 +1,6 @@
 // ============================================================
 // Battery Monitor 2.0
-// Version 2.3.3
+// Version 2.3.6
 // Author: Jdthomas24
 // Namespace: jdthomas24
 // Description: Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.
@@ -15,7 +15,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "2.3.3"
+    version: "2.3.6"
 )
 def installed() {
     log.debug "Installed - initializing app"

@@ -592,7 +592,7 @@ def historyPage(){
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Level</td><td>Date</td><td>Manual?</td>"
+            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
             table+="</tr>"
 
             state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->

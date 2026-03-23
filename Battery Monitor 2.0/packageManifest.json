@@ -2,7 +2,7 @@
     "packageName": "Battery Monitor 2.0",
     "author": "Jdthomas24",
     "version": "2.1.3",
-    "releaseNotes": "2.1.3 Delete the old app from Hubitat apps first, install frsh app via HPM. This will ensure your historicl data will be accuarate goign forward.\n", 
+    "releaseNotes": "2.1.3 Delete the old app from Hubitat apps first, install frsh app via HPM. This will ensure your historical data will be accuarate goign forward.\n", 
     "category": "Utility",
     "description": "Advanced Hubitat battery monitoring with analytics, trends, and replacement tracking. Auto-discover devices, monitor battery health, track replacements, and receive daily reports.",
     "dateReleased": "2026/03/16",

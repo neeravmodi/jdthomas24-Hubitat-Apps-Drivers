@@ -620,6 +620,10 @@ def manualReplacementPage() {
     if(state.replacements == null) state.replacements = []
     if(!autoDevices) autoDevices = []
 
+    // Clear previous selections
+    replaceDevicesManual = null
+    replaceConfirmManual = false
+
     dynamicPage(name: "manualReplacementPage", title: "Manual Battery Replacement", install: false) {
         section("Select Devices") {
             if(!autoDevices || autoDevices.size() == 0) {

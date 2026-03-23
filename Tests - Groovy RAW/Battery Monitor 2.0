@@ -620,9 +620,9 @@ def manualReplacementPage() {
     if(state.replacements == null) state.replacements = []
     if(!autoDevices) autoDevices = []
 
-    // Clear previous selections
-    replaceDevicesManual = null
-    replaceConfirmManual = false
+    // Clear previous selections (Hubitat settings)
+    app.updateSetting("replaceDevicesManual",[value: null, type:"enum"])
+    app.updateSetting("replaceConfirmManual",[value: false, type:"bool"])
 
     dynamicPage(name: "manualReplacementPage", title: "Manual Battery Replacement", install: false) {
         section("Select Devices") {

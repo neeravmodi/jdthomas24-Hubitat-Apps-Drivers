@@ -40,26 +40,19 @@ def mainPage(){
         }
 
         section("Auto Battery Discovery"){
-    paragraph "**⚠ Important: The app will automatically detect all devices reporting battery levels. " +
-              "Please select the devices you want to actively monitor from the list below. " +
-              "Only selected devices will be tracked for trends, battery health, and notifications.**"
+    paragraph "<b>Select the battery-powered devices you want to monitor.</b><br>" +
+              "Only selected devices will be included in reports, trends, and notifications."
 
-    paragraph "⚠ <b>FIRST TIME SETUP REQUIRED:</b><br>" +
-              "After selecting devices for the first time, you MUST click <b>Done</b> to exit the app before viewing any reports.<br>" +
-              "Failure to do so may result in errors when opening the Battery Summary or Trends pages."
-            input "autoDevices","capability.battery",
-                  title:"Select battery devices to monitor",
-                  multiple:true,
-                  required:true
-        }
+    input "autoDevices","capability.battery",
+          title:"Select battery devices to monitor",
+          multiple:true,
+          required:true
+}
 
-        section("Battery Scan Interval"){
-            input "scanInterval","enum",
-            title:"Scan Frequency",
-            options:["1":"Hourly","3":"Every 3 Hours","6":"Every 6 Hours"],
-            defaultValue:"3"
-        }
-
+section("⚠ Setup Step (Required Once)"){
+    paragraph "<span style='color:red;'><b>IMPORTANT:</b> After selecting devices for the first time, you must click Done before opening reports.</span><br>" +
+              "This completes setup and prevents errors."
+}
         section("Report Settings"){
             input "reportFrequency","enum",
                   title:"Report Frequency",

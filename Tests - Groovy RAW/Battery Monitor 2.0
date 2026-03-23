@@ -185,34 +185,41 @@ def shouldRunEveryXDays(daysInterval){
     return false
 }
 def scheduledSummary() {
-    def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
-    if(!devs) return
+    def devs = (autoDevices ?: []).findAll { it?.currentValue("battery") != null }
+    if (!devs) return
 
-    // Categorize and sort devices by battery within each category
-    def low = devs.findAll { it.currentValue("battery")?.toInteger() <= 25 }
-                  .sort { a,b -> (a.currentValue("battery") ?: 0) <=> (b.currentValue("battery") ?: 0) }
-                  .collect { "${it.displayName} – ${it.currentValue("battery")}%"} 
+    // Sort devices by worst battery first using drain/health thresholds
+    devs = devs.sort { a, b ->
+        def order = ["Poor": 1, "Fair": 2, "Good": 3, "Excellent": 4]
+        return (order[health(a)] ?: 5) <=> (order[health(b)] ?: 5)
+    }
 
-    def medium = devs.findAll { 
-                    def lvl = it.currentValue("battery")?.toInteger() ?: 100
-                    lvl > 25 && lvl <= 70 
-                 }
-                 .sort { a,b -> (a.currentValue("battery") ?: 0) <=> (b.currentValue("battery") ?: 0) }
-                 .collect { "${it.displayName} – ${it.currentValue("battery")}%"} 
+    // Categorize devices with same color scheme as UI
+    def categories = [
+        "🔴 Poor": [],
+        "🟠 Fair": [],
+        "🟢 Good": [],
+        "🟢 Excellent": [] // can merge Excellent with Good or keep separate
+    ]
 
-    def good = devs.findAll { it.currentValue("battery")?.toInteger() > 70 }
-                  .sort { a,b -> (a.currentValue("battery") ?: 0) <=> (b.currentValue("battery") ?: 0) }
-                  .collect { "${it.displayName} – ${it.currentValue("battery")}%"} 
+    devs.each { device ->
+        def lvl = device.currentValue("battery")?.toInteger() ?: 100
+        def cat = lvl <= 25 ? "🔴 Poor" : lvl <= 70 ? "🟠 Fair" : lvl <= 100 ? "🟢 Good" : "🟢 Excellent"
+        categories[cat] << device.displayName
+    }
 
-    // Build message: Low → Medium → Good
-    def msg = "📊 Battery Summary Notification\n\n"
-    if(low) msg += "🔴 Low (${low.size()} devices)\n- ${low.join('\n- ')}\n\n"
-    if(medium) msg += "🟡 Medium (${medium.size()} devices)\n- ${medium.join('\n- ')}\n\n"
-    if(good) msg += "🟢 Good (${good.size()} devices)\n- ${good.join('\n- ')}\n\n"
+    // Build message
+    def msg = "🔋 Battery Summary\n"
+    categories.each { cat, list ->
+        if (list) {
+            msg += "\n${cat} (${list.size()} devices):\n"
+            list.each { dev -> msg += "- ${dev}\n" }
+        }
+    }
 
     // Send notifications
-    if(enablePush) sendPush(msg)
-    if(notifyDevices) notifyDevices.each{ it.deviceNotification(msg) }
+    if (enablePush) sendPush(msg)
+    if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
 }
 
 // ============================================================

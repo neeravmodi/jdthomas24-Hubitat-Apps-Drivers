@@ -188,24 +188,24 @@ def scheduledSummary() {
     def devs = (autoDevices ?: []).findAll { it?.currentValue("battery") != null }
     if (!devs) return
 
-    // Sort devices by worst battery first using drain/health thresholds
+    // Sort devices by worst battery first
     devs = devs.sort { a, b ->
         def order = ["Poor": 1, "Fair": 2, "Good": 3, "Excellent": 4]
         return (order[health(a)] ?: 5) <=> (order[health(b)] ?: 5)
     }
 
-    // Categorize devices with same color scheme as UI
+    // Categorize devices
     def categories = [
         "🔴 Poor": [],
         "🟠 Fair": [],
         "🟢 Good": [],
-        "🟢 Excellent": [] // can merge Excellent with Good or keep separate
+        "🟢 Excellent": []
     ]
 
     devs.each { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         def cat = lvl <= 25 ? "🔴 Poor" : lvl <= 70 ? "🟠 Fair" : lvl <= 100 ? "🟢 Good" : "🟢 Excellent"
-        categories[cat] << device.displayName
+        categories[cat] << "${device.displayName} (${lvl}%)"
     }
 
     // Build message
@@ -221,7 +221,6 @@ def scheduledSummary() {
     if (enablePush) sendPush(msg)
     if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
 }
-
 // ============================================================
 // ===================== BATTERY HANDLER =====================
 // ============================================================

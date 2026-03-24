@@ -306,11 +306,11 @@ def scheduledSummary() {
 
 	// Stale Devices
 	if(staleDevices){
-    msg += "\n⚠️ Stale Devices (${staleDevices.size()}):\n"
-    staleDevices.each { d ->
-        msg += "• ${d.name} — no activity for ${d.hours}h\n"
+   		msg += "\n⚠️ Stale Devices (${staleDevices.size()}):\n"
+    	staleDevices.each { d ->
+        	msg += "• ${d.name} — no activity for ${d.hours}h\n"
+    	}
     }
-
 	
 	// Send notifications — always send if at least one category is enabled
     if (enablePush) sendPush(msg)
@@ -675,6 +675,7 @@ def summaryPage(){
         }
     }
 }
+
 // ============================================================
 // ===================== TRENDS PAGE =========================
 // ============================================================

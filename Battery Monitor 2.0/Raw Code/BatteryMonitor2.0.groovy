@@ -25,6 +25,7 @@ def installed() {
 def updated() {
     log.debug "Updated - re-initializing app"
     unschedule()
+    unsubscribe()
     initialize()
 
     // Clean up state for devices that have been removed

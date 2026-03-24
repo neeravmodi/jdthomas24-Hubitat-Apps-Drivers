@@ -163,16 +163,16 @@ section("Auto Battery Discovery") {
         section("Notifications") {
             input "enablePush", "bool", title: "Enable notifications", defaultValue: true
             input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
-			
-			paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
-			input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",    defaultValue: true
-			input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",   defaultValue: true
-			input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",   defaultValue: false
-			input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)", defaultValue: false
-			input "notifyHighDrain", "bool", title: "⚠️ Include Health (High Drain - Fair or Poor, drain > 0.7%/day)", defaultValue: true
 
-			paragraph "<b>Test notification:</b>"
-			input "sendTestNow", "bool", title: "📤 Send Test Notification Now (tap, then click Done)", defaultValue: false
+            paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
+            input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",    defaultValue: true
+            input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",   defaultValue: true
+            input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",   defaultValue: false
+            input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)", defaultValue: false
+            input "notifyHighDrain", "bool", title: "⚠️ Include Health (High Drain - Fair or Poor, drain > 0.7%/day)", defaultValue: true
+
+            paragraph "<b>Test notification:</b>"
+            input "sendTestNow", "bool", title: "📤 Send Test Notification Now (tap, then click Done)", defaultValue: false
 
             input "staleThresholdHours", "number",
             title: "Mark device as stale if no activity for X hours",
@@ -241,26 +241,26 @@ def scheduledSummary() {
 
     // Categorize devices by battery percentage using same color codes
     // Map category name → [list of devices, toggle setting]
-	def categories = [
-		"🔴 Poor":      [list: [], enabled: notifyPoor      != null ? notifyPoor      : true],
-		"🟠 Fair":      [list: [], enabled: notifyFair      != null ? notifyFair      : true],
-		"🟢 Good":      [list: [], enabled: notifyGood      != null ? notifyGood      : false],
-		"🟢 Excellent": [list: [], enabled: notifyExcellent != null ? notifyExcellent : false]
-	]
+    def categories = [
+        "🔴 Poor":      [list: [], enabled: notifyPoor      != null ? notifyPoor      : true],
+        "🟠 Fair":      [list: [], enabled: notifyFair      != null ? notifyFair      : true],
+        "🟢 Good":      [list: [], enabled: notifyGood      != null ? notifyGood      : false],
+        "🟢 Excellent": [list: [], enabled: notifyExcellent != null ? notifyExcellent : false]
+    ]
 
     devs.each { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         def cat = lvl == 100 ? "🟢 Excellent" : lvl > 70 ? "🟢 Good" : lvl > 25 ? "🟠 Fair" : "🔴 Poor"
-		categories[cat].list << [device: device, name: device.displayName.trim(), level: lvl]
+        categories[cat].list << [device: device, name: device.displayName.trim(), level: lvl]
     }
 
     // Sort each category by battery percentage (lowest first)
-	categories.each { cat, data ->
-		categories[cat].list = data.list.sort { a, b ->
-			a.level != b.level ? a.level <=> b.level : a.name <=> b.name
-		}
-	}
-	
+    categories.each { cat, data ->
+        categories[cat].list = data.list.sort { a, b ->
+            a.level != b.level ? a.level <=> b.level : a.name <=> b.name
+        }
+    }
+
     // ---- High Drain Section ----
     // Flags any device whose health() is NOT Excellent (i.e. Good, Fair, or Poor drain rate)
     def highDrainList = devs.findAll { device ->
@@ -268,51 +268,51 @@ def scheduledSummary() {
     }.collect { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         [name: device.displayName.trim(), level: lvl, health: health(device), drain: displayDrain(device)]
-	}.sort { a, b ->
-		a.level != b.level ? a.level <=> b.level : a.name <=> b.name
-	}
+    }.sort { a, b ->
+        a.level != b.level ? a.level <=> b.level : a.name <=> b.name
+    }
 
     // ---- Build message — only include enabled categories ----
     def msg = "🔋 Battery Summary\n"
     def staleDevices = devs.findAll { isStale(it) }.collect {
-    	def last = getLastActivityTime(it)
-    	def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
-    	[name: it.displayName, hours: hours]
-	}
-
-	// Battery level sections — always show enabled categories, "None" if empty
-	categories.each { cat, data ->
-		if (data.enabled) {
-			msg += "\n${cat}:\n"
-			if (data.list) {
-				data.list.each { dev -> msg += "• ${dev.level}% ${dev.name}\n" }
-			} else {
-				msg += "None\n"
-			}
-		}
-	}
-
-	// High drain section
-	if (notifyHighDrain != null ? notifyHighDrain : true) {
-		msg += "\n⚠️ Health (Drain / Day):\n"
-		if (highDrainList) {
-			highDrainList.each { dev ->
-				msg += "• ${dev.health} (${dev.drain}%) ${dev.name} (${dev.level}%)\n"
-			}
-		} else {
-			msg += "None\n"
-		}
-	}
-
-	// Stale Devices
-	if(staleDevices){
-   		msg += "\n⚠️ Stale Devices (${staleDevices.size()}):\n"
-    	staleDevices.each { d ->
-        	msg += "• ${d.name} — no activity for ${d.hours}h\n"
-    	}
+        def last = getLastActivityTime(it)
+        def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
+        [name: it.displayName, hours: hours]
     }
-	
-	// Send notifications — always send if at least one category is enabled
+
+    // Battery level sections — always show enabled categories, "None" if empty
+    categories.each { cat, data ->
+        if (data.enabled) {
+            msg += "\n${cat}:\n"
+            if (data.list) {
+                data.list.each { dev -> msg += "• ${dev.level}% ${dev.name}\n" }
+            } else {
+                msg += "None\n"
+            }
+        }
+    }
+
+    // High drain section
+    if (notifyHighDrain != null ? notifyHighDrain : true) {
+        msg += "\n⚠️ Health (Drain / Day):\n"
+        if (highDrainList) {
+            highDrainList.each { dev ->
+                msg += "• ${dev.health} (${dev.drain}%) ${dev.name} (${dev.level}%)\n"
+            }
+        } else {
+            msg += "None\n"
+        }
+    }
+
+    // Stale Devices
+    if(staleDevices){
+        msg += "\n⚠️ Stale Devices (${staleDevices.size()}):\n"
+        staleDevices.each { d ->
+            msg += "• ${d.name} — no activity for ${d.hours}h\n"
+        }
+    }
+
+    // Send notifications — always send if at least one category is enabled
     if (enablePush) sendPush(msg)
     if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
 }
@@ -477,11 +477,11 @@ def estDays(device){
     return Math.round(level/drain)
 }
 def health(device){
-    def drain=getDrain(device)
-    if(drain<0.3) return "Excellent"
-    if(drain >= 0.3 && drain <= 0.7) return "Good"
-    if(drain > 0.7 && drain <= 1.2) return "Fair"
-    return "Poor"
+    def drain = getDrain(device)
+    if(drain < 0.3)                     return "Excellent"
+    if(drain >= 0.3 && drain <= 0.7)    return "Good"
+    if(drain > 0.7 && drain <= 1.2)     return "Fair"
+                                        return "Poor"
 }
 
 // ============================================================
@@ -690,11 +690,11 @@ def trendsPage(){
             }
 
             // Sort by worst battery first using same color thresholds
-			devs = devs.sort { a, b ->
-				def levelA = a.currentValue("battery")?.toInteger() ?: 100
-				def levelB = b.currentValue("battery")?.toInteger() ?: 100
-				levelA != levelB ? levelA <=> levelB : a.displayName.trim() <=> b.displayName.trim()
-			}
+            devs = devs.sort { a, b ->
+                def levelA = a.currentValue("battery")?.toInteger() ?: 100
+                def levelB = b.currentValue("battery")?.toInteger() ?: 100
+                levelA != levelB ? levelA <=> levelB : a.displayName.trim() <=> b.displayName.trim()
+            }
 
             // Start table
             def table="<table style='width:100%; border-collapse: collapse;'>"

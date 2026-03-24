@@ -27,11 +27,26 @@ def updated() {
     unschedule()
     initialize()
 
+    // Clean up state for devices that have been removed
+    def currentIds = autoDevices?.collect { it.id as String } ?: []
+
+    state.history?.keySet()?.findAll { !currentIds.contains(it) }?.each { removedId ->
+        state.history.remove(removedId)
+        state.trend?.remove(removedId)
+        log.debug "Cleaned up removed device: ${removedId}"
+    }
+
+    // Also remove replacement history for devices no longer monitored
+    //if (state.replacements) {
+    //    def currentNames = autoDevices?.collect { it.displayName } ?: []
+    //    state.replacements = state.replacements.findAll { currentNames.contains(it.device) }
+    //}
+
     // Fire test notification if toggle was set, then reset it
     if (settings?.sendTestNow) {
         scheduledSummary()
         app.updateSetting("sendTestNow", [value: false, type: "bool"])
-	}
+    }
 }
 
 def initialize(){
@@ -584,7 +599,11 @@ def summaryPage(){
 
         section("Battery Summary"){
             def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
-            devs = devs.sort{ a,b -> (a.currentValue("battery") ?: 100) <=> (b.currentValue("battery") ?: 100) }
+            devs = devs.sort{ a,b -> 
+                def levelA = a.currentValue("battery") ?: 100
+                def levelB = b.currentValue("battery") ?: 100
+                levelA != levelB ? levelA <=> levelB : a.displayName <=> b.displayName
+            }
             if(!devs){
                 paragraph "No battery devices found."
                 return

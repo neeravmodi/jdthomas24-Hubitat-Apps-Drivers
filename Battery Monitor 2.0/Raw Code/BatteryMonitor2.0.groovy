@@ -26,6 +26,12 @@ def updated() {
     log.debug "Updated - re-initializing app"
     unschedule()
     initialize()
+
+    // Fire test notification if toggle was set, then reset it
+    if (settings?.sendTestNow) {
+        scheduledSummary()
+        app.updateSetting("sendTestNow", [value: false, type: "bool"])
+	}
 }
 
 def initialize(){
@@ -138,6 +144,16 @@ section("Auto Battery Discovery") {
         section("Notifications") {
             input "enablePush", "bool", title: "Enable notifications", defaultValue: true
             input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
+			
+			paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
+			input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",    defaultValue: true
+			input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",   defaultValue: true
+			input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",   defaultValue: false
+			input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)", defaultValue: false
+			input "notifyHighDrain", "bool", title: "⚠️ Include High Drain (drain ≥ 0.7%/day)", defaultValue: true
+
+			paragraph "<b>Test notification:</b>"
+			input "sendTestNow", "bool", title: "📤 Send Test Notification Now (tap, then click Done)", defaultValue: false
         }
 
         // ================= Reports =================
@@ -184,39 +200,86 @@ def shouldRunEveryXDays(daysInterval){
     if(diff >= daysInterval){ state.lastReportRun = now(); return true }
     return false
 }
+
+def shouldRunWeekly(){
+    def today = new Date()
+    def lastRun = state.lastReportRun ? new Date(state.lastReportRun) : null
+    if(!lastRun){ state.lastReportRun = now(); return true }
+    if(today.format("u") == "1"){  // Monday
+        def diff = (today.time - lastRun.time) / (1000*60*60*24)
+        if(diff >= 7){ state.lastReportRun = now(); return true }
+    }
+    return false
+}
+
 def scheduledSummary() {
     def devs = (autoDevices ?: []).findAll { it?.currentValue("battery") != null }
     if (!devs) return
 
     // Categorize devices by battery percentage using same color codes
+    // Map category name → [list of devices, toggle setting]
     def categories = [
-        "🔴 Poor": [],
-        "🟠 Fair": [],
-        "🟢 Good": [],
-        "🟢 Excellent": []
+        "🔴 Poor":      [list: [], enabled: notifyPoor      ?: true],
+        "🟠 Fair":      [list: [], enabled: notifyFair      ?: true],
+        "🟢 Good":      [list: [], enabled: notifyGood      ?: false],
+        "🟢 Excellent": [list: [], enabled: notifyExcellent ?: false]
     ]
 
     devs.each { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         def cat = lvl <= 25 ? "🔴 Poor" : lvl <= 70 ? "🟠 Fair" : lvl <= 100 ? "🟢 Good" : "🟢 Excellent"
-        categories[cat] << [name: device.displayName, level: lvl]
+        categories[cat].list << [device: device, name: device.displayName, level: lvl]
     }
 
     // Sort each category by battery percentage (lowest first)
-    categories.each { cat, list ->
-        categories[cat] = list.sort { it.level }
+    categories.each { cat, data ->
+        categories[cat].list = data.list.sort { it.level }
     }
 
-    // Build message
+    // ---- High Drain Section ----
+    // Flags any device whose health() is NOT Excellent (i.e. Good, Fair, or Poor drain rate)
+    def highDrainList = devs.findAll { device ->
+        getDrain(device) >= 0.7
+    }.collect { device ->
+        def lvl = device.currentValue("battery")?.toInteger() ?: 100
+        [name: device.displayName, level: lvl, health: health(device), drain: displayDrain(device)]
+    }.sort { it.level }
+
+    // ---- Build message — only include enabled categories ----
     def msg = "🔋 Battery Summary\n"
-    categories.each { cat, list ->
-        if (list) {
-            msg += "\n${cat} (${list.size()} devices):\n"
-            list.each { dev -> msg += "- ${dev.name} (${dev.level}%)\n" }
+    def hasContent = false
+
+    // Battery level sections
+    categories.each { cat, data ->
+        if (data.enabled && data.list) {
+            msg += "\n${cat} (${data.list.size()} devices):\n"
+            data.list.each { dev -> msg += "• ${dev.name} (${dev.level}%)\n" }
+            hasContent = true
         }
     }
 
+    // High drain section
+    if ((notifyHighDrain ?: true) && highDrainList) {
+        msg += "\n⚠️ High Drain (${highDrainList.size()} devices):\n"
+        highDrainList.each { dev ->
+            msg += "• ${dev.name} (${dev.level}%) — ${dev.health} health, ${dev.drain}%/day\n"
+        }
+        hasContent = true
+    }
+
+    // Don't send if nothing to report
+    if (!hasContent) return
+
     // Send notifications
+    if (enablePush) sendPush(msg)
+    if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
+}
+
+// ============================================================
+// ===================== CRITICAL ALERTS =====================
+// ============================================================
+def sendCriticalReport(device, level) {
+    def msg = "🔴 Battery Critical Alert\n\n${device.displayName} is at ${level}%."
     if (enablePush) sendPush(msg)
     if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
 }
@@ -427,7 +490,7 @@ def formatTimeAgo(ts){
 // ===================== BATTERY DISPLAY =====================
 // ============================================================
 def getBatteryLevelDisplay(level, device=null){
-    level = (level instanceof Number ? level : null) ?: 100
+    level = (level instanceof Number ? level : null) != null ? level : 100
 
     if(level == 0){
         def data = device ? safeHistory(device) : null

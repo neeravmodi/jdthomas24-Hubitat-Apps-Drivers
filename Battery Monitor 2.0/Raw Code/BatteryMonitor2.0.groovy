@@ -53,6 +53,8 @@ def updated() {
 def initialize(){
     log.debug "Initialization complete"
 
+    if(state.replacements == null) state.replacements = []
+
     // Schedule automatic reports
     scheduleReportFrequency()
 
@@ -167,10 +169,14 @@ section("Auto Battery Discovery") {
 			input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",   defaultValue: true
 			input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",   defaultValue: false
 			input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)", defaultValue: false
-			input "notifyHighDrain", "bool", title: "⚠️ Include Health (High Drain) (drain ≥ 0.7%/day)", defaultValue: true
+			input "notifyHighDrain", "bool", title: "⚠️ Include Health (High Drain - Fair or Poor, drain > 0.7%/day)", defaultValue: true
 
 			paragraph "<b>Test notification:</b>"
 			input "sendTestNow", "bool", title: "📤 Send Test Notification Now (tap, then click Done)", defaultValue: false
+
+            input "staleThresholdHours", "number",
+            title: "Mark device as stale if no activity for X hours",
+            defaultValue: 24
         }
 
         // ================= Reports =================
@@ -244,7 +250,7 @@ def scheduledSummary() {
 
     devs.each { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
-        def cat = lvl <= 25 ? "🔴 Poor" : lvl <= 70 ? "🟠 Fair" : lvl <= 100 ? "🟢 Good" : "🟢 Excellent"
+        def cat = lvl == 100 ? "🟢 Excellent" : lvl > 70 ? "🟢 Good" : lvl > 25 ? "🟠 Fair" : "🔴 Poor"
 		categories[cat].list << [device: device, name: device.displayName.trim(), level: lvl]
     }
 
@@ -258,7 +264,7 @@ def scheduledSummary() {
     // ---- High Drain Section ----
     // Flags any device whose health() is NOT Excellent (i.e. Good, Fair, or Poor drain rate)
     def highDrainList = devs.findAll { device ->
-        getDrain(device) >= 0.7
+        getDrain(device) > 0.7
     }.collect { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         [name: device.displayName.trim(), level: lvl, health: health(device), drain: displayDrain(device)]
@@ -268,6 +274,11 @@ def scheduledSummary() {
 
     // ---- Build message — only include enabled categories ----
     def msg = "🔋 Battery Summary\n"
+    def staleDevices = devs.findAll { isStale(it) }.collect {
+    	def last = getLastActivityTime(it)
+    	def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
+    	[name: it.displayName, hours: hours]
+	}
 
 	// Battery level sections — always show enabled categories, "None" if empty
 	categories.each { cat, data ->
@@ -292,6 +303,14 @@ def scheduledSummary() {
 			msg += "None\n"
 		}
 	}
+
+	// Stale Devices
+	if(staleDevices){
+    msg += "\n⚠️ Stale Devices (${staleDevices.size()}):\n"
+    staleDevices.each { d ->
+        msg += "• ${d.name} — no activity for ${d.hours}h\n"
+    }
+
 	
 	// Send notifications — always send if at least one category is enabled
     if (enablePush) sendPush(msg)
@@ -460,8 +479,8 @@ def estDays(device){
 def health(device){
     def drain=getDrain(device)
     if(drain<0.3) return "Excellent"
-    if(drain<0.7) return "Good"
-    if(drain<1.2) return "Fair"
+    if(drain >= 0.3 && drain <= 0.7) return "Good"
+    if(drain > 0.7 && drain <= 1.2) return "Fair"
     return "Poor"
 }
 
@@ -494,11 +513,12 @@ def getLastActivityTime(device){
 }
 
 def isStale(device){
-    def lastBattery = getLastBatteryTime(device)
     def lastActivity = getLastActivityTime(device)
-    if(!lastBattery || !lastActivity) return false
-    def diffHours = (lastActivity - lastBattery) / (1000*60*60)
-    return diffHours >= 24
+    if(!lastActivity) return false
+
+    def diffHours = (now() - lastActivity) / (1000*60*60)
+
+    return diffHours >= (settings?.staleThresholdHours ?: 24)
 }
 
 def formatTimeAgo(ts){
@@ -515,16 +535,12 @@ def formatTimeAgo(ts){
 def getBatteryLevelDisplay(level, device=null){
     level = (level instanceof Number ? level : null) != null ? level : 100
 
-    if(level == 0){
-        def data = device ? safeHistory(device) : null
-        if(data) data.justReplaced = false
-    }
-
     def label = ""
-    if(level<=25) label = "🔴 ${level}%"
-    else if(level<=70) label = "🟠 ${level}%"
-    else label = "🟢 ${level}%"
+    if(level > 70)      label = "🟢 ${level}%"
+    else if(level > 25) label = "🟠 ${level}%"
+    else                label = "🔴 ${level}%"
 
+    // Handle recently replaced tag
     def data = (device && state.history?.containsKey(device.id)) ? safeHistory(device) : null
     def showTag = data?.justReplaced == true
     def replacedTime = data?.replacedTime
@@ -612,6 +628,7 @@ def summaryPage(){
                 def levelB = b.currentValue("battery") ?: 100
                 levelA != levelB ? levelA <=> levelB : a.displayName <=> b.displayName
             }
+
             if(!devs){
                 paragraph "No battery devices found."
                 return
@@ -634,6 +651,14 @@ def summaryPage(){
                 def stale = isStale(device)
                 def color = getBatteryLevelDisplay(level, device)
 
+                // ✅ SAFE stale calculation (FIXED)
+                def staleTag = ""
+                if(stale){
+                    def last = getLastActivityTime(device)
+                    def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
+                    staleTag = " ⚠️ Stale (${hours}h)"
+                }
+
                 table+="<tr>"
                 table+="<td>${device.displayName}</td>"
                 table+="<td>${color}</td>"
@@ -641,7 +666,7 @@ def summaryPage(){
                 table+="<td>${est}</td>"
                 table+="<td>${h}</td>"
                 table+="<td>${lastBatteryStr}</td>"
-                table+="<td>${lastActivityStr}${stale?' ⚠':' '}</td>"
+                table+="<td>${lastActivityStr}${staleTag}</td>"
                 table+="</tr>"
             }
 
@@ -711,7 +736,7 @@ def historyPage(){
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type</td>"
+            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
             table+="</tr>"
 
             state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->

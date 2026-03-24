@@ -67,11 +67,12 @@ preferences {
     page(name:"summaryPage")
     page(name:"trendsPage")
     page(name:"historyPage")
+    page(name:"deleteHistoryPage")
+    page(name:"deleteHistoryConfirmPage")
     page(name:"manualReplacementPage")
     page(name:"manualReplacementConfirmPage")
     page(name:"infoPage")
 }
-
 
 // ============================================================
 // ===================== MAIN PAGE ===========================
@@ -166,7 +167,7 @@ section("Auto Battery Discovery") {
 			input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",   defaultValue: true
 			input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",   defaultValue: false
 			input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)", defaultValue: false
-			input "notifyHighDrain", "bool", title: "⚠️ Include High Drain (drain ≥ 0.7%/day)", defaultValue: true
+			input "notifyHighDrain", "bool", title: "⚠️ Include Health (High Drain) (drain ≥ 0.7%/day)", defaultValue: true
 
 			paragraph "<b>Test notification:</b>"
 			input "sendTestNow", "bool", title: "📤 Send Test Notification Now (tap, then click Done)", defaultValue: false
@@ -234,59 +235,65 @@ def scheduledSummary() {
 
     // Categorize devices by battery percentage using same color codes
     // Map category name → [list of devices, toggle setting]
-    def categories = [
-        "🔴 Poor":      [list: [], enabled: notifyPoor      ?: true],
-        "🟠 Fair":      [list: [], enabled: notifyFair      ?: true],
-        "🟢 Good":      [list: [], enabled: notifyGood      ?: false],
-        "🟢 Excellent": [list: [], enabled: notifyExcellent ?: false]
-    ]
+	def categories = [
+		"🔴 Poor":      [list: [], enabled: notifyPoor      != null ? notifyPoor      : true],
+		"🟠 Fair":      [list: [], enabled: notifyFair      != null ? notifyFair      : true],
+		"🟢 Good":      [list: [], enabled: notifyGood      != null ? notifyGood      : false],
+		"🟢 Excellent": [list: [], enabled: notifyExcellent != null ? notifyExcellent : false]
+	]
 
     devs.each { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         def cat = lvl <= 25 ? "🔴 Poor" : lvl <= 70 ? "🟠 Fair" : lvl <= 100 ? "🟢 Good" : "🟢 Excellent"
-        categories[cat].list << [device: device, name: device.displayName, level: lvl]
+		categories[cat].list << [device: device, name: device.displayName.trim(), level: lvl]
     }
 
     // Sort each category by battery percentage (lowest first)
-    categories.each { cat, data ->
-        categories[cat].list = data.list.sort { it.level }
-    }
-
+	categories.each { cat, data ->
+		categories[cat].list = data.list.sort { a, b ->
+			a.level != b.level ? a.level <=> b.level : a.name <=> b.name
+		}
+	}
+	
     // ---- High Drain Section ----
     // Flags any device whose health() is NOT Excellent (i.e. Good, Fair, or Poor drain rate)
     def highDrainList = devs.findAll { device ->
         getDrain(device) >= 0.7
     }.collect { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
-        [name: device.displayName, level: lvl, health: health(device), drain: displayDrain(device)]
-    }.sort { it.level }
+        [name: device.displayName.trim(), level: lvl, health: health(device), drain: displayDrain(device)]
+	}.sort { a, b ->
+		a.level != b.level ? a.level <=> b.level : a.name <=> b.name
+	}
 
     // ---- Build message — only include enabled categories ----
     def msg = "🔋 Battery Summary\n"
-    def hasContent = false
 
-    // Battery level sections
-    categories.each { cat, data ->
-        if (data.enabled && data.list) {
-            msg += "\n${cat} (${data.list.size()} devices):\n"
-            data.list.each { dev -> msg += "• ${dev.name} (${dev.level}%)\n" }
-            hasContent = true
-        }
-    }
+	// Battery level sections — always show enabled categories, "None" if empty
+	categories.each { cat, data ->
+		if (data.enabled) {
+			msg += "\n${cat}:\n"
+			if (data.list) {
+				data.list.each { dev -> msg += "• ${dev.level}% ${dev.name}\n" }
+			} else {
+				msg += "None\n"
+			}
+		}
+	}
 
-    // High drain section
-    if ((notifyHighDrain ?: true) && highDrainList) {
-        msg += "\n⚠️ High Drain (${highDrainList.size()} devices):\n"
-        highDrainList.each { dev ->
-            msg += "• ${dev.name} (${dev.level}%) — ${dev.health} health, ${dev.drain}%/day\n"
-        }
-        hasContent = true
-    }
-
-    // Don't send if nothing to report
-    if (!hasContent) return
-
-    // Send notifications
+	// High drain section
+	if (notifyHighDrain != null ? notifyHighDrain : true) {
+		msg += "\n⚠️ Health (Drain / Day):\n"
+		if (highDrainList) {
+			highDrainList.each { dev ->
+				msg += "• ${dev.health} (${dev.drain}%) ${dev.name} (${dev.level}%)\n"
+			}
+		} else {
+			msg += "None\n"
+		}
+	}
+	
+	// Send notifications — always send if at least one category is enabled
     if (enablePush) sendPush(msg)
     if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
 }
@@ -657,13 +664,11 @@ def trendsPage(){
             }
 
             // Sort by worst battery first using same color thresholds
-            devs = devs.sort { a, b ->
-                def levelA = a.currentValue("battery")?.toInteger() ?: 100
-                def levelB = b.currentValue("battery")?.toInteger() ?: 100
-
-                // Lower battery first
-                levelA <=> levelB
-            }
+			devs = devs.sort { a, b ->
+				def levelA = a.currentValue("battery")?.toInteger() ?: 100
+				def levelB = b.currentValue("battery")?.toInteger() ?: 100
+				levelA != levelB ? levelA <=> levelB : a.displayName.trim() <=> b.displayName.trim()
+			}
 
             // Start table
             def table="<table style='width:100%; border-collapse: collapse;'>"
@@ -706,7 +711,7 @@ def historyPage(){
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
+            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type</td>"
             table+="</tr>"
 
             state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->
@@ -723,6 +728,79 @@ def historyPage(){
             table+="</table>"
             paragraph table
             paragraph "<b>Legend:</b> <span style='color:green;'>A</span> = Automatic, <span style='color:blue;'>M</span> = Manual"
+        }
+
+        section("Delete an Entry") {
+            href "deleteHistoryPage", title: "🗑️ Delete a History Entry"
+        }
+    }
+}
+
+// ============================================================
+// ===================== DELETE HISTORY PAGE =================
+// ============================================================
+def deleteHistoryPage() {
+    app.removeSetting("deleteEntrySelection")
+    app.updateSetting("confirmEntryDelete", [value: false, type: "bool"])
+
+    dynamicPage(name: "deleteHistoryPage", title: "Delete a History Entry", install: false) {
+
+        if (!state.replacements || state.replacements.size() == 0) {
+            section() {
+                paragraph "No replacement history to delete."
+            }
+        } else {
+            // Build options as "Device — Date" strings, keyed by index
+            def options = [:]
+            state.replacements.sort{ a,b -> b.date <=> a.date }.eachWithIndex { r, i ->
+                options["${i}"] = "🗑️ ${r.device} — ${r.date}"
+            }
+
+            section("Select Entry to Delete") {
+                input "deleteEntrySelection", "enum",
+                      title: "Choose entry",
+                      options: options,
+                      multiple: false,
+                      required: false
+            }
+
+            section("Confirm") {
+                input "confirmEntryDelete", "bool",
+                      title: "Confirm deletion",
+                      defaultValue: false
+            }
+
+            section() {
+                href "deleteHistoryConfirmPage", title: "Submit"
+            }
+        }
+    }
+}
+
+// ============================================================
+// ============= DELETE HISTORY CONFIRM PAGE =================
+// ============================================================
+def deleteHistoryConfirmPage() {
+    dynamicPage(name: "deleteHistoryConfirmPage", title: "Delete Entry", install: false) {
+        section("Result") {
+            if (!confirmEntryDelete) {
+                paragraph "⚠️ Deletion cancelled — confirm checkbox was not checked."
+            } else if (deleteEntrySelection == null) {
+                paragraph "⚠️ No entry selected."
+            } else {
+                def sorted = state.replacements.sort{ a,b -> b.date <=> a.date }
+                def idx = deleteEntrySelection.toInteger()
+                if (idx >= 0 && idx < sorted.size()) {
+                    def entry = sorted[idx]
+                    state.replacements = state.replacements.findAll {
+                        !(it.device == entry.device && it.date == entry.date)
+                    }
+                    app.updateSetting("confirmEntryDelete", [value: false, type: "bool"])
+                    paragraph "✅ Deleted entry for ${entry.device} on ${entry.date}."
+                } else {
+                    paragraph "⚠️ Entry not found — it may have already been deleted."
+                }
+            }
         }
     }
 }
@@ -760,10 +838,6 @@ def manualReplacementPage() {
 
         section() {
             href "manualReplacementConfirmPage", title: "Submit Replacement"
-        }
-
-        section() {
-            href "manualReplacementPage", title: "Back"
         }
     }
 }
@@ -834,10 +908,6 @@ def manualReplacementConfirmPage() {
             } else {
                 paragraph "⚠ Please select device(s) and confirm replacement or use the Back button to cancel."
             }
-        }
-
-        section() {
-            href "manualReplacementPage", title: "Back to Replacement Page"
         }
     }
 }

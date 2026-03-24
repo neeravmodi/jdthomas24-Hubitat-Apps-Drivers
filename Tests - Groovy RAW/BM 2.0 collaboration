@@ -53,6 +53,8 @@ def updated() {
 def initialize(){
     log.debug "Initialization complete"
 
+    if(state.replacements == null) state.replacements = []
+
     // Schedule automatic reports
     scheduleReportFrequency()
 
@@ -170,6 +172,10 @@ section("Auto Battery Discovery") {
 
 			paragraph "<b>Test notification:</b>"
 			input "sendTestNow", "bool", title: "📤 Send Test Notification Now (tap, then click Done)", defaultValue: false
+
+            input "staleThresholdHours", "number",
+            title: "Mark device as stale if no activity for X hours",
+            defaultValue: 24
         }
 
         // ================= Reports =================
@@ -243,7 +249,7 @@ def scheduledSummary() {
 
     devs.each { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
-        def cat = lvl <= 25 ? "🔴 Poor" : lvl <= 70 ? "🟠 Fair" : lvl <= 100 ? "🟢 Good" : "🟢 Excellent"
+        def cat = lvl == 100 ? "🟢 Excellent" : lvl > 70 ? "🟢 Good" : lvl > 25 ? "🟠 Fair" : "🔴 Poor"
         categories[cat].list << [device: device, name: device.displayName, level: lvl]
     }
 
@@ -255,8 +261,8 @@ def scheduledSummary() {
     // ---- High Drain Section ----
     // Flags any device whose health() is NOT Excellent (i.e. Good, Fair, or Poor drain rate)
     def highDrainList = devs.findAll { device ->
-        getDrain(device) >= 0.7
-    }.collect { device ->
+    getDrain(device) > 0.7
+  }.collect { device ->
         def lvl = device.currentValue("battery")?.toInteger() ?: 100
         [name: device.displayName, level: lvl, health: health(device), drain: displayDrain(device)]
     }.sort { it.level }
@@ -264,6 +270,11 @@ def scheduledSummary() {
     // ---- Build message — only include enabled categories ----
     def msg = "🔋 Battery Summary\n"
     def hasContent = false
+    def staleDevices = devs.findAll { isStale(it) }.collect {
+    def last = getLastActivityTime(it)
+    def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
+    [name: it.displayName, hours: hours]
+}
 
     // Battery level sections
     categories.each { cat, data ->
@@ -282,7 +293,14 @@ def scheduledSummary() {
         }
         hasContent = true
     }
+	if(staleDevices){
+    msg += "\n⚠️ Stale Devices (${staleDevices.size()}):\n"
+    staleDevices.each { d ->
+        msg += "• ${d.name} — no activity for ${d.hours}h\n"
+    }
+    hasContent = true
 
+    }
     // Don't send if nothing to report
     if (!hasContent) return
 
@@ -487,11 +505,12 @@ def getLastActivityTime(device){
 }
 
 def isStale(device){
-    def lastBattery = getLastBatteryTime(device)
     def lastActivity = getLastActivityTime(device)
-    if(!lastBattery || !lastActivity) return false
-    def diffHours = (lastActivity - lastBattery) / (1000*60*60)
-    return diffHours >= 24
+    if(!lastActivity) return false
+
+    def diffHours = (now() - lastActivity) / (1000*60*60)
+
+    return diffHours >= (settings?.staleThresholdHours ?: 24)
 }
 
 def formatTimeAgo(ts){
@@ -605,6 +624,7 @@ def summaryPage(){
                 def levelB = b.currentValue("battery") ?: 100
                 levelA != levelB ? levelA <=> levelB : a.displayName <=> b.displayName
             }
+
             if(!devs){
                 paragraph "No battery devices found."
                 return
@@ -627,6 +647,14 @@ def summaryPage(){
                 def stale = isStale(device)
                 def color = getBatteryLevelDisplay(level, device)
 
+                // ✅ SAFE stale calculation (FIXED)
+                def staleTag = ""
+                if(stale){
+                    def last = getLastActivityTime(device)
+                    def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
+                    staleTag = " ⚠️ Stale (${hours}h)"
+                }
+
                 table+="<tr>"
                 table+="<td>${device.displayName}</td>"
                 table+="<td>${color}</td>"
@@ -634,7 +662,7 @@ def summaryPage(){
                 table+="<td>${est}</td>"
                 table+="<td>${h}</td>"
                 table+="<td>${lastBatteryStr}</td>"
-                table+="<td>${lastActivityStr}${stale?' ⚠':' '}</td>"
+                table+="<td>${lastActivityStr}${staleTag}</td>"
                 table+="</tr>"
             }
 

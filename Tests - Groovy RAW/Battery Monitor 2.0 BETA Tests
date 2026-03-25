@@ -704,19 +704,22 @@ def logReplacement(device, newLevel, manual=false){
 		def hubIp = location.hub.localIP
 
         section("Battery Summary"){
-            def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
-            devs = devs.sort{ a,b -> 
-                def levelA = a.currentValue("battery")?.toInteger()
-                levelA = levelA != null ? levelA : 100
-                def levelB = b.currentValue("battery")?.toInteger()
-                levelB = levelB != null ? levelB : 100
-                levelA != levelB ? levelA <=> levelB : a.displayName <=> b.displayName
-            }
+   	 	// ⚠ Note for users about device links
+    		paragraph "<span style='color:red; font-weight:bold;'>⚠ Device links below are accessible only on your local network (LAN). They will not work remotely.</span>"
 
-            if(!devs){
-                paragraph "No battery devices found."
-                return
-            }
+    		def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
+    		devs = devs.sort{ a,b -> 
+        	def levelA = a.currentValue("battery")?.toInteger()
+        	levelA = levelA != null ? levelA : 100
+        	def levelB = b.currentValue("battery")?.toInteger()
+        	levelB = levelB != null ? levelB : 100
+        	levelA != levelB ? levelA <=> levelB : a.displayName <=> b.displayName
+    	}
+
+    	if(!devs){
+        paragraph "No battery devices found."
+        return
+    	}
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'>"

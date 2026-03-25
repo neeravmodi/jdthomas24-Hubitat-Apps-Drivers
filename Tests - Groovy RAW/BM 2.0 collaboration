@@ -1,6 +1,6 @@
 // ============================================================
 // Battery Monitor 2.0 (TESTER Collaboration)
-// Version 2.3.6
+// Version 2.7.1
 // Author: Jdthomas24
 // Namespace: jdthomas24
 // Description: Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.
@@ -16,7 +16,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "2.3.6"
+    version: "2.7.1"
 )
 
 def installed() {
@@ -963,44 +963,104 @@ def manualReplacementConfirmPage() {
 def infoPage(Map params = [:]){
     dynamicPage(name:"infoPage", title:"Battery Health Guide", install:false){
         
-        // ⚠ Note about color differences
+        // ================= COLOR CLARIFICATION =================
         section("<b>Note on Colors</b>") {
-            paragraph "⚠ Colors in battery reports reflect battery percentage (🔴 low, 🟠 medium, 🟢 good), while colors in this guide reflect drain-based health (🟢 Excellent, 🟡 Good, 🟠 Fair, 🔴 Poor)."
+            paragraph "Battery reports use color indicators for battery percentage:\n" +
+                      "🔴 Low (≤25%)  |  🟠 Medium (26–70%)  |  🟢 Good (71–100%)\n\n" +
+                      "Battery health is shown as a rating (Excellent, Good, Fair, Poor) based on drain rate."
         }
 
+        // ================= HEALTH TABLE =================
         section("<b>Battery Health Breakdown</b>"){
             def table = """<table style='width:100%; border-collapse: collapse;'>
 <tr style='font-weight:bold;'><td>Health</td><td>Drain Rate (per day)</td><td>What It Means</td></tr>
-<tr><td>🟢 Excellent</td><td>&lt; 0.3%</td><td>Battery is barely draining (very efficient device)</td></tr>
-<tr><td>🟡 Good</td><td>0.3 – 0.7%</td><td>Normal battery usage</td></tr>
-<tr><td>🟠 Fair</td><td>0.7 – 1.2%</td><td>Higher-than-normal drain</td></tr>
-<tr><td>🔴 Poor</td><td>&gt; 1.2%</td><td>Battery draining fast (problem likely)</td></tr>
+<tr><td>Excellent</td><td>&lt; 0.3%</td><td>Very efficient device with minimal battery usage</td></tr>
+<tr><td>Good</td><td>0.3 – 0.7%</td><td>Normal battery usage</td></tr>
+<tr><td>Fair</td><td>0.7 – 1.2%</td><td>Higher-than-normal drain</td></tr>
+<tr><td>Poor</td><td>&gt; 1.2%</td><td>Battery draining quickly — likely an issue</td></tr>
 </table>"""
             paragraph table
+
+            paragraph "Devices with drain above 0.7%/day are flagged as <b>High Drain</b> in reports."
         }
 
+        // ================= DRAIN EXPLANATION =================
         section("<b>🔍 What is Battery Drain?</b>"){ 
-            paragraph "Battery drain shows how fast a device uses battery (% per day). Lower values mean longer battery life. Higher values may indicate excessive usage, weak signal, or device issues." 
+            paragraph "Battery drain represents the estimated percentage of battery a device uses per day.\n\n" +
+                      "This app calculates drain using a smoothed average of recent battery activity (up to 5 samples), rather than a single reading.\n\n" +
+                      "Key behaviors:\n" +
+                      "• Uses averaging to stabilize readings\n" +
+                      "• Filters out sudden spikes or bad reports\n" +
+                      "• Caps extreme values to prevent unrealistic drain\n" +
+                      "• Resets and recalculates after battery replacement\n\n" +
+                      "New or recently replaced devices may temporarily show a default drain (~0.30%/day) until enough data is collected.\n\n" +
+                      "<b>Lower drain = longer battery life</b>\n" +
+                      "<b>Higher drain = possible issue (signal, reporting frequency, or device behavior)</b>"
         }
-        
-        section("<b>📅 How Estimated Days Works</b>"){ 
-            paragraph "Estimated days remaining is calculated using the current battery level divided by the average daily drain rate. This becomes more accurate after multiple battery reports." 
+
+        // ================= DRAIN WARMUP =================
+        section("<b>⚙️ Why Drain May Look Incorrect at First</b>"){ 
+            paragraph "Battery drain becomes more accurate over time.\n\n" +
+                      "You may notice:\n" +
+                      "• New devices show ~0.30%/day (default baseline)\n" +
+                      "• Recently replaced batteries reset drain\n" +
+                      "• Devices that report infrequently update slowly\n\n" +
+                      "Allow devices time to report multiple battery readings for best accuracy."
         }
-        
+
+        // ================= EST DAYS =================
+        section("<b>📅 Estimated Battery Life</b>"){ 
+            paragraph "Estimated days remaining is calculated using:\n\n" +
+                      "<b>Battery % ÷ Daily Drain Rate</b>\n\n" +
+                      "This value becomes more accurate as more drain data is collected."
+        }
+
+        // ================= TRENDS =================
         section("<b>📊 Understanding Trends</b>"){ 
-            paragraph "Trends are calculated using recent battery activity. Devices need multiple battery reports before trends become accurate.\n• Stable = very low drain\n• Moderate = normal usage\n• Heavy Drain = higher-than-normal usage" 
+            paragraph "Trends reflect how quickly a device is draining based on recent activity:\n\n" +
+                      "• Stable = very low drain (&lt;0.3%/day)\n" +
+                      "• Moderate = typical usage (0.3–0.8%/day)\n" +
+                      "• Heavy Drain = high usage (≥0.8%/day)\n\n" +
+                      "Devices need multiple battery reports before trends become reliable."
         }
-        
+
+        // ================= REPLACEMENT =================
         section("<b>🔋 Battery Replacement Detection</b>"){ 
-            paragraph "The app automatically detects battery replacement when a device jumps from ≤40% to ≥95%. Manual replacement can be used if a battery is changed outside this range.\n\nAfter a battery is replaced, the device will be marked as 'Recently Replaced'. This tag will automatically clear after about 24 hours or once the device reports again." 
+            paragraph "The app automatically detects battery replacement when a device jumps from ≤40% to ≥95%.\n\n" +
+                      "Additional logic helps detect replacements even with partial jumps when sufficient history exists.\n\n" +
+                      "Manual replacement can be used if a battery is changed outside these conditions.\n\n" +
+                      "After replacement:\n" +
+                      "• Drain resets to a baseline\n" +
+                      "• Device is marked as <b>Recently Replaced</b>\n" +
+                      "• Label clears after ~24 hours or once normal drain resumes"
         }
-        
+
+        // ================= STALE =================
+        section("<b>⚠️ Stale Devices</b>"){ 
+            paragraph "A device is marked as <b>Stale</b> if it has not reported activity within the configured time threshold.\n\n" +
+                      "This may indicate:\n" +
+                      "• Device offline\n" +
+                      "• Communication issues\n" +
+                      "• Dead battery\n\n" +
+                      "Stale devices are highlighted in reports to help identify potential problems."
+        }
+
+        // ================= TROUBLESHOOTING =================
         section("<b>⚠ Troubleshooting High Drain</b>"){ 
-            paragraph "If a device shows high drain:\n• Check signal strength (Z-Wave/Zigbee routing)\n• Verify device isn't reporting too frequently\n• Confirm correct battery type is used\n• Look for environmental factors (cold, humidity)\n• Consider device firmware or driver issues" 
+            paragraph "If a device shows high drain:\n\n" +
+                      "• Check signal strength (Z-Wave/Zigbee routing)\n" +
+                      "• Verify device is not reporting too frequently\n" +
+                      "• Confirm correct battery type is installed\n" +
+                      "• Check for environmental factors (temperature, humidity)\n" +
+                      "• Review device firmware or driver behavior"
         }
-        
+
+        // ================= TIPS =================
         section("<b>💡 Tips</b>"){ 
-            paragraph "• Devices with consistent low drain are healthy\n• Sudden spikes usually indicate a problem\n• Compare similar devices to identify outliers\n" 
+            paragraph "• Consistent low drain = healthy device\n" +
+                      "• Sudden spikes usually indicate a problem\n" +
+                      "• Compare similar devices to identify outliers\n" +
+                      "• Allow time for data to stabilize after battery replacement"
         }
     }
 }

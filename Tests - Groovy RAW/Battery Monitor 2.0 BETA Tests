@@ -1,6 +1,6 @@
 // ============================================================
 // Battery Monitor 2.0 (TESTER Collaboration)
-// Version 2.4.0 beta 8
+// Version 2.4.0 beta 9
 // Author: Jdthomas24
 // Namespace: jdthomas24
 // Description: Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.
@@ -682,83 +682,127 @@ def logReplacement(device, newLevel, manual=false){
 // ===================== SUMMARY PAGE ========================
 // ============================================================
 	def summaryPage(){
-    	dynamicPage(name:"summaryPage",title:"Battery Summary",install:false){
+    dynamicPage(name:"summaryPage", title:"Battery Summary", install:false){
 
-        	// ✅ Scroll to top on page load
-        	section("") {
-            	paragraph """<script>
-                	window.scrollTo(0,0);
-            </script>"""
-        }
-
-        	// 🛑 FIRST RUN PROTECTION
-        	if(!state.history || state.history.size() == 0){
-            	section("Setup Required"){
-                	paragraph "⚠ <b>Setup Not Complete</b><br><br>" +
+        // 🛑 FIRST RUN PROTECTION (more robust)
+        if(!state.history || !autoDevices || autoDevices.size() == 0){
+            section("Setup Required"){
+                paragraph "⚠ <b>Setup Not Complete</b><br><br>" +
                           "You must click <b>Done</b> after selecting your devices before viewing reports.<br><br>" +
                           "Please exit the app and reopen it, then try again."
             }
             return
         }
 
-		def hubIp = location.hub.localIP
+        // ✅ Safe hub IP (C8-safe)
+        def hubIp = location?.hub?.localIP ?: ""
 
         section("Battery Summary"){
-   	 	// ⚠ Note for users about device links
-    		paragraph "<span style='color:red; font-weight:bold;'>⚠ Device links below are accessible only on your local network (LAN). They will not work remotely.</span>"
 
-    		def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
-    		devs = devs.sort{ a,b -> 
-        	def levelA = a.currentValue("battery")?.toInteger()
-        	levelA = levelA != null ? levelA : 100
-        	def levelB = b.currentValue("battery")?.toInteger()
-        	levelB = levelB != null ? levelB : 100
-        	levelA != levelB ? levelA <=> levelB : a.displayName <=> b.displayName
-    	}
+            paragraph "<span style='color:red; font-weight:bold;'>⚠ Device links below are accessible only on your local network (LAN). They will not work remotely.</span>"
 
-    	if(!devs){
-        paragraph "No battery devices found."
-        return
-    	}
-
-            def table="<table style='width:100%; border-collapse: collapse;'>"
-            table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
-            table+="</tr>"
-
-            devs.each{ device ->
-                def data = safeHistory(device)
-
-                def level = device.currentValue("battery")?.toInteger()
-                level = level != null ? level : 100
-                def drain = getDrain(device)
-                def est = estDays(device)
-                def h = health(device)
-                def lastBatteryStr = formatTimeAgo(getLastBatteryTime(device))
-                def lastActivityStr = formatTimeAgo(getLastActivityTime(device))
-                def stale = isStale(device)
-                def color = getBatteryLevelDisplay(level, device)
-
-                // ✅ SAFE stale calculation (FIXED)
-                def staleTag = ""
-                if(stale){
-                    def last = getLastActivityTime(device)
-                    def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
-                    staleTag = " ⚠️ Stale (${hours}h)"
+            def devs = (autoDevices ?: []).findAll { 
+                try {
+                    it?.currentValue("battery") != null
+                } catch(e){
+                    return false
                 }
-
-                table+="<tr>"
-    			table+="<td><a href='http://${hubIp}/device/edit/${device.id}' target='_blank'>${device.displayName}</a></td>"
-                table+="<td>${color}</td>"
-                table+="<td>${String.format('%.2f',drain)}</td>"
-                table+="<td>${est}</td>"
-                table+="<td>${h}</td>"
-                table+="<td>${lastBatteryStr}</td>"
-                table+="<td>${lastActivityStr}${staleTag}</td>"
-                table+="</tr>"
             }
 
-            table+="</table>"
+            // Sort safely
+            devs = devs.sort { a, b ->
+                def levelA = null
+                def levelB = null
+
+                try { levelA = a.currentValue("battery")?.toInteger() } catch(e) {}
+                try { levelB = b.currentValue("battery")?.toInteger() } catch(e) {}
+
+                levelA = levelA != null ? levelA : 100
+                levelB = levelB != null ? levelB : 100
+
+                levelA != levelB ? levelA <=> levelB : 
+                (a.displayName ?: "") <=> (b.displayName ?: "")
+            }
+
+            if(!devs){
+                paragraph "No battery devices found."
+                return
+            }
+
+            def table = "<table style='width:100%; border-collapse: collapse;'>"
+            table += "<tr style='font-weight:bold;'>"
+            table += "<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
+            table += "</tr>"
+
+            devs.each { device ->
+
+                // ✅ SAFE VALUE EXTRACTION
+                def level = null
+                try { level = device.currentValue("battery")?.toInteger() } catch(e) {}
+                level = level != null ? level : 100
+
+                def drain = 0.3
+                try { drain = getDrain(device) } catch(e) {}
+
+                def est = 0
+                try { est = estDays(device) } catch(e) {}
+
+                def h = "Unknown"
+                try { h = health(device) } catch(e) {}
+
+                def lastBatteryStr = "N/A"
+                try { lastBatteryStr = formatTimeAgo(getLastBatteryTime(device)) } catch(e) {}
+
+                def lastActivityStr = "N/A"
+                def lastActivity = null
+                try {
+                    lastActivity = device.getLastActivity()
+                } catch(e) {}
+
+                if(lastActivity){
+                    try {
+                        lastActivityStr = formatTimeAgo(safeTime(lastActivity))
+                    } catch(e) {}
+                }
+
+                def stale = false
+                try { stale = isStale(device) } catch(e) {}
+
+                def color = ""
+                try { color = getBatteryLevelDisplay(level, device) } catch(e) {
+                    color = "${level}%"
+                }
+
+                // ✅ SAFE stale tag
+                def staleTag = ""
+                if(stale && lastActivity){
+                    try {
+                        def hours = ((now() - safeTime(lastActivity)) / (1000*60*60)).toInteger()
+                        staleTag = " ⚠️ Stale (${hours}h)"
+                    } catch(e) {}
+                }
+
+                // ✅ SAFE device name
+                def name = device.displayName ?: "Unknown Device"
+
+                table += "<tr>"
+
+                if(hubIp){
+                    table += "<td><a href='http://${hubIp}/device/edit/${device.id}' target='_blank'>${name}</a></td>"
+                } else {
+                    table += "<td>${name}</td>"
+                }
+
+                table += "<td>${color}</td>"
+                table += "<td>${String.format('%.2f', drain)}</td>"
+                table += "<td>${est}</td>"
+                table += "<td>${h}</td>"
+                table += "<td>${lastBatteryStr}</td>"
+                table += "<td>${lastActivityStr}${staleTag}</td>"
+                table += "</tr>"
+            }
+
+            table += "</table>"
             paragraph table
         }
     }

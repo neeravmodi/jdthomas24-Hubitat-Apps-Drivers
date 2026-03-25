@@ -818,10 +818,9 @@ def logReplacement(device, newLevel, manual=false){
 	}
 
 		// 🔹 CLOSE dynamicPage and summaryPage function
-	    }  // closes dynamicPage
-		}      // closes summaryPage()
-    }
-}
+    }  // closes dynamicPage
+}      // closes summaryPage()
+
 
 // ============================================================
 // ===================== TRENDS PAGE =========================

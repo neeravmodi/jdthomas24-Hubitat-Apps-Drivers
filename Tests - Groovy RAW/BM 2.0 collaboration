@@ -739,7 +739,7 @@ def trendsPage(){
                 table+="<td>${device.displayName}</td>"
                 table+="<td>${color}</td>"
                 table+="<td>${trend}</td>"
-                table+="<td>${String.format('%.2f', drain)}</td>"
+                table+="<td>${String.format('%.2f', drain)}%/day</td>"
                 table+="</tr>"
             }
 
@@ -1025,9 +1025,9 @@ def infoPage(Map params = [:]){
         // ================= TRENDS =================
         section("<b>📊 Understanding Trends</b>"){ 
             paragraph "Trends reflect how quickly a device is draining based on recent activity:\n\n" +
-                      "• Stable = very low drain (&lt;0.3%/day)\n" +
-                      "• Moderate = typical usage (0.3–0.8%/day)\n" +
-                      "• Heavy Drain = high usage (≥0.8%/day)\n\n" +
+                      	"• Stable (Low Drain) = very low drain (<0.3%/day)\n" +
+						"• Normal Usage = typical usage (0.3–0.8%/day)\n" +
+						"• High Drain = high usage (≥0.8%/day)\n\n"
                       "Devices need multiple battery reports before trends become reliable."
         }
 

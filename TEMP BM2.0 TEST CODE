@@ -709,13 +709,19 @@ def summaryPage(){
             return
         }
 
-        // ✅ HARD TOP LOCK (ONLY WORKING METHOD)
-        section("") {
-            paragraph "<b>Battery Summary</b>"
+        // ✅ FORCE TOP RENDER (CRITICAL FIX)
+        section(" ") {
+            paragraph " "   // MUST NOT BE EMPTY
+        }
+
+        // ✅ Header section
+        section("Battery Summary"){
+            paragraph "<span style='color:red; font-weight:bold;'>⚠ Device links below are accessible only on your local network (LAN). They will not work remotely.</span>"
         }
 
         def hubIp = location?.hub?.localIP ?: ""
 
+        // --- SAFE FILTER + SORT ---
         def devs = (autoDevices ?: []).findAll { 
             try { it?.currentValue("battery") != null } catch(e){ return false }
         }
@@ -733,6 +739,7 @@ def summaryPage(){
             return
         }
 
+        // === Build HTML Table ===
         def table = "<table style='width:100%; border-collapse: collapse;'>"
         table += "<tr style='font-weight:bold;'>"
         table += "<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
@@ -769,7 +776,8 @@ def summaryPage(){
 
         table += "</table>"
 
-        section("") { paragraph table }
+        // ✅ WRAP TABLE TO FIX SCROLL ISSUE
+        section("") { paragraph "<div style='white-space:normal !important;'>${table}</div>" }
     }
 }
 // ============================================================
@@ -778,8 +786,8 @@ def summaryPage(){
 def trendsPage(){
     dynamicPage(name:"trendsPage", title:"Battery Trends", install:false){
 
-        section("") {
-            paragraph "<b>Battery Trends</b>"
+        section("Battery Trends"){
+            paragraph "<b>Battery Trend Report</b>"
         }
 
         def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
@@ -827,16 +835,16 @@ def trendsPage(){
 
         table+="</table>"
 
-        section("") { paragraph table }
+        // ✅ WRAP TABLE TO FIX SCROLL ISSUE
+        section("") { paragraph "<div style='white-space:normal !important;'>${table}</div>" }
     }
 }
+
 // ============================================================
 // ===================== HISTORY PAGE ========================
 // ============================================================
 def historyPage() {
     dynamicPage(name:"historyPage", title:"Battery Replacement History", install:false){
-
-        section("") { paragraph "<div id='top'></div>" }
 
         section("Battery Replacement History"){
             paragraph "<b>Replacement Log</b>"
@@ -847,8 +855,7 @@ def historyPage() {
             return
         }
 
-        def table="<a name='top'></a>"
-        table+="<table style='width:100%; border-collapse: collapse;'>"
+        def table="<table style='width:100%; border-collapse: collapse;'>"
         table+="<tr style='font-weight:bold;'>"
         table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
         table+="</tr>"
@@ -866,7 +873,8 @@ def historyPage() {
 
         table+="</table>"
 
-        section("") { paragraph table }
+        // ✅ WRAP TABLE TO FIX SCROLL ISSUE
+        section("") { paragraph "<div style='white-space:normal !important;'>${table}</div>" }
     }
 }
 
@@ -874,38 +882,76 @@ def historyPage() {
 // ===================== DELETE HISTORY PAGE =================
 // ============================================================
 def deleteHistoryPage() {
+    // Reset any previous selections
     app.removeSetting("deleteEntrySelection")
     app.updateSetting("confirmEntryDelete", [value: false, type: "bool"])
 
     dynamicPage(name: "deleteHistoryPage", title: "Delete a History Entry", install: false) {
 
+        // 🛑 FIRST RUN / EMPTY LOG PROTECTION
         if (!state.replacements || state.replacements.size() == 0) {
-            section() { paragraph "No replacement history to delete." }
-        } else {
-            def options = [:]
-            state.replacements.sort{ a,b -> b.date <=> a.date }.eachWithIndex { r, i ->
-                options["${i}"] = "🗑️ ${r.device} — ${r.date}"
+            section("No Replacements Logged") {
+                paragraph "⚠ <b>No battery replacements have been logged yet.</b>"
+            }
+            return
+        }
+
+        // ✅ FORCE TOP RENDER (CRITICAL FIX)
+        section(" ") {
+            paragraph " "   // MUST NOT BE EMPTY
+        }
+
+        section("Select a Replacement Entry to Delete") {
+
+            // --- Build a safe table with device, level, date, type
+            def table = "<table style='width:100%; border-collapse: collapse;'>"
+            table += "<tr style='font-weight:bold;'>"
+            table += "<td>Device</td><td>Level</td><td>Date</td><td>Type</td>"
+            table += "</tr>"
+
+            state.replacements.sort { a, b -> b.date <=> a.date }.each { r ->
+                def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
+                              r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
+                table += "<tr>"
+                table += "<td>${r.device}</td>"
+                table += "<td>${r.level}%</td>"
+                table += "<td>${r.date}</td>"
+                table += "<td>${typeTag}</td>"
+                table += "</tr>"
             }
 
-            section("Select Entry to Delete") {
-                input "deleteEntrySelection", "enum",
-                      title: "Choose entry",
-                      options: options,
-                      multiple: false,
-                      required: false
-            }
+            table += "</table>"
 
-            section("Confirm") {
-                input "confirmEntryDelete", "bool",
-                      title: "Confirm deletion",
-                      defaultValue: false
-            }
+            // ✅ Wrap table to fix scroll/overflow issues
+            paragraph "<div style='white-space:normal !important;'>${table}</div>"
 
-            section() { href "deleteHistoryConfirmPage", title: "Submit" }
+            // --- Dropdown for selecting entry to delete
+            input "deleteEntrySelection", "enum",
+                  title: "Select Replacement Entry to Delete",
+                  options: state.replacements.collect { it.date + " — " + it.device + " (" + it.level + "%)" },
+                  required: true,
+                  multiple: false
+        }
+
+        section("Confirm Deletion") {
+            input "confirmEntryDelete", "bool",
+                  title: "⚠ Check to confirm deletion",
+                  required: true,
+                  defaultValue: false
+        }
+
+        // --- Delete action
+        if (confirmEntryDelete && deleteEntrySelection) {
+            def entry = state.replacements.find { "${it.date} — ${it.device} (${it.level}%)" == deleteEntrySelection }
+            if (entry) {
+                state.replacements.remove(entry)
+                app.updateSetting("confirmEntryDelete", [value: false, type: "bool"])
+                app.removeSetting("deleteEntrySelection")
+                section("") { paragraph "✅ Replacement entry deleted successfully." }
+            }
         }
     }
 }
-
 // ============================================================
 // ============= DELETE HISTORY CONFIRM PAGE =================
 // ============================================================

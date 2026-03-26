@@ -803,24 +803,10 @@ def logReplacement(device, newLevel, manual=false){
             }
 
             table += "</table>"
-			paragraph table
-
-			// 🛠 Scroll to top fix for C8 Pro
-			section("") {
-    			paragraph """<script>
-       			 function scrollTopFix() {
-            		window.scrollTo(0, 0);
+            paragraph table
         }
-        setTimeout(scrollTopFix, 50);
-        setTimeout(scrollTopFix, 150);
-        setTimeout(scrollTopFix, 300);
-    </script>"""
-	}
-
-		// 🔹 CLOSE dynamicPage and summaryPage function
-    }  // closes dynamicPage
-}      // closes summaryPage()
-
+    }
+}
 
 // ============================================================
 // ===================== TRENDS PAGE =========================
@@ -829,14 +815,11 @@ def trendsPage(){
     dynamicPage(name:"trendsPage", title:"Battery Trends", install:false){
 
         // ✅ Scroll to top on page load
-       		section("") {
-   			 paragraph """<script>
-        		function scrollTopFix() { window.scrollTo(0, 0); }
-		        setTimeout(scrollTopFix, 50);
-        		setTimeout(scrollTopFix, 150);
-        		setTimeout(scrollTopFix, 300);
-    		</script>"""
-		}
+        section("") {
+            paragraph """<script>
+                window.scrollTo(0,0);
+            </script>"""
+        }
 
         section("Battery Trends"){
             def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
@@ -904,13 +887,10 @@ def historyPage() {
 
         // ✅ Scroll to top on page load
         section("") {
-   			 paragraph """<script>
-        			function scrollTopFix() { window.scrollTo(0, 0); }
-        			setTimeout(scrollTopFix, 50);
-        			setTimeout(scrollTopFix, 150);
-        			setTimeout(scrollTopFix, 300);
-    			</script>"""
-			}
+            paragraph """<script>
+                window.scrollTo(0,0);
+            </script>"""
+        }
 
         section("Battery Replacement History"){
             if(!state.replacements || state.replacements.size() == 0){

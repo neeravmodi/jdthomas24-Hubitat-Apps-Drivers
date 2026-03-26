@@ -682,7 +682,7 @@ def logReplacement(device, newLevel, manual=false){
 def summaryPage(){
     dynamicPage(name:"summaryPage", title:"Battery Summary", install:false){
 
-        // 🛑 FIRST RUN PROTECTION (more robust)
+        // 🛑 FIRST RUN PROTECTION
         if(!state.history || !autoDevices || autoDevices.size() == 0){
             section("Setup Required"){
                 paragraph "⚠ <b>Setup Not Complete</b><br><br>" +
@@ -692,89 +692,78 @@ def summaryPage(){
             return
         }
 
-        // ✅ C8 Pro–safe scroll to bottom
+        // ✅ Anchor forces top render (C8 safe)
         section("") {
-            paragraph """<script>
-                setTimeout(function(){
-                    window.scrollTo(0, document.body.scrollHeight || document.documentElement.scrollHeight);
-                }, 200);
-            </script>"""
+            paragraph "<div id='top'></div>"
         }
 
-        // ✅ Safe hub IP (C8-safe)
-        def hubIp = location?.hub?.localIP ?: ""
-
+        // ✅ Header section (forces correct render start)
         section("Battery Summary"){
             paragraph "<span style='color:red; font-weight:bold;'>⚠ Device links below are accessible only on your local network (LAN). They will not work remotely.</span>"
+        }
 
-            def devs = (autoDevices ?: []).findAll { 
-                try {
-                    it?.currentValue("battery") != null
-                } catch(e){
-                    return false
-                }
+        def hubIp = location?.hub?.localIP ?: ""
+
+        def devs = (autoDevices ?: []).findAll { 
+            try { it?.currentValue("battery") != null } catch(e){ return false }
+        }
+
+        devs = devs.sort { a, b ->
+            def levelA = null
+            def levelB = null
+            try { levelA = a.currentValue("battery")?.toInteger() } catch(e) {}
+            try { levelB = b.currentValue("battery")?.toInteger() } catch(e) {}
+            levelA = levelA != null ? levelA : 100
+            levelB = levelB != null ? levelB : 100
+            levelA != levelB ? levelA <=> levelB : 
+            (a.displayName ?: "") <=> (b.displayName ?: "")
+        }
+
+        if(!devs){
+            section(""){ paragraph "No battery devices found." }
+            return
+        }
+
+        def table = "<a name='top'></a>"
+        table += "<table style='width:100%; border-collapse: collapse;'>"
+        table += "<tr style='font-weight:bold;'>"
+        table += "<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
+        table += "</tr>"
+
+        devs.each { device ->
+            def level = device.currentValue("battery")?.toInteger() ?: 100
+            def drain = getDrain(device) ?: 0.3
+            def est = estDays(device) ?: 0
+            def h = health(device) ?: "Unknown"
+            def lastBatteryStr = formatTimeAgo(getLastBatteryTime(device)) ?: "N/A"
+            def lastActivityStr = "N/A"
+            def lastActivity = null
+            try { lastActivity = device.getLastActivity() } catch(e) {}
+
+            if(lastActivity){
+                try { lastActivityStr = formatTimeAgo(safeTime(lastActivity)) } catch(e) {}
             }
 
-            // Sort safely
-            devs = devs.sort { a, b ->
-                def levelA = null
-                def levelB = null
+            def stale = isStale(device) ?: false
+            def color = getBatteryLevelDisplay(level, device)
+            def staleTag = stale && lastActivity ? " ⚠️ Stale (${((now() - safeTime(lastActivity))/(1000*60*60)).toInteger()}h)" : ""
+            def name = device.displayName ?: "Unknown Device"
 
-                try { levelA = a.currentValue("battery")?.toInteger() } catch(e) {}
-                try { levelB = b.currentValue("battery")?.toInteger() } catch(e) {}
-
-                levelA = levelA != null ? levelA : 100
-                levelB = levelB != null ? levelB : 100
-
-                levelA != levelB ? levelA <=> levelB : 
-                (a.displayName ?: "") <=> (b.displayName ?: "")
-            }
-
-            if(!devs){
-                paragraph "No battery devices found."
-                return
-            }
-
-            def table = "<table style='width:100%; border-collapse: collapse;'>"
-            table += "<tr style='font-weight:bold;'>"
-            table += "<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
+            table += "<tr>"
+            table += hubIp ? "<td><a href='http://${hubIp}/device/edit/${device.id}' target='_blank'>${name}</a></td>" : "<td>${name}</td>"
+            table += "<td>${color}</td>"
+            table += "<td>${String.format('%.2f', drain)}</td>"
+            table += "<td>${est}</td>"
+            table += "<td>${h}</td>"
+            table += "<td>${lastBatteryStr}</td>"
+            table += "<td>${lastActivityStr}${staleTag}</td>"
             table += "</tr>"
+        }
 
-            devs.each { device ->
-                def level = device.currentValue("battery")?.toInteger() ?: 100
-                def drain = getDrain(device) ?: 0.3
-                def est = estDays(device) ?: 0
-                def h = health(device) ?: "Unknown"
-                def lastBatteryStr = formatTimeAgo(getLastBatteryTime(device)) ?: "N/A"
-                def lastActivityStr = "N/A"
-                def lastActivity = null
-                try { lastActivity = device.getLastActivity() } catch(e) {}
+        table += "</table>"
 
-                if(lastActivity){
-                    try { lastActivityStr = formatTimeAgo(safeTime(lastActivity)) } catch(e) {}
-                }
-
-                def stale = isStale(device) ?: false
-                def color = getBatteryLevelDisplay(level, device)
-                def staleTag = stale && lastActivity ? " ⚠️ Stale (${((now() - safeTime(lastActivity))/(1000*60*60)).toInteger()}h)" : ""
-                def name = device.displayName ?: "Unknown Device"
-
-                table += "<tr>"
-                if(hubIp){
-                    table += "<td><a href='http://${hubIp}/device/edit/${device.id}' target='_blank'>${name}</a></td>"
-                } else {
-                    table += "<td>${name}</td>"
-                }
-                table += "<td>${color}</td>"
-                table += "<td>${String.format('%.2f', drain)}</td>"
-                table += "<td>${est}</td>"
-                table += "<td>${h}</td>"
-                table += "<td>${lastBatteryStr}</td>"
-                table += "<td>${lastActivityStr}${staleTag}</td>"
-                table += "</tr>"
-            }
-
-            table += "</table>"
+        // ✅ Table isolated in its own section (KEY FIX)
+        section("") {
             paragraph table
         }
     }
@@ -786,61 +775,62 @@ def summaryPage(){
 def trendsPage(){
     dynamicPage(name:"trendsPage", title:"Battery Trends", install:false){
 
-        // ✅ C8 Pro–safe scroll to bottom
         section("") {
-            paragraph """<script>
-                setTimeout(function(){
-                    window.scrollTo(0, document.body.scrollHeight || document.documentElement.scrollHeight);
-                }, 200);
-            </script>"""
+            paragraph "<div id='top'></div>"
         }
 
         section("Battery Trends"){
-            def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
+            paragraph "<b>Battery Trend Report</b>"
+        }
 
-            if(!devs){
-                paragraph "No battery devices found for trends."
-                return
-            }
+        def devs = (autoDevices ?: []).findAll{ it?.currentValue("battery") != null }
 
-            def trendPriority = ["Heavy Drain": 1, "Moderate": 2, "Stable": 3]
+        if(!devs){
+            section(""){ paragraph "No battery devices found for trends." }
+            return
+        }
 
-            devs = devs.sort { a, b ->
-                def trendA = state.trend[a.id] ?: "Stable"
-                def trendB = state.trend[b.id] ?: "Stable"
-                def prioA = trendPriority[trendA] ?: 3
-                def prioB = trendPriority[trendB] ?: 3
-                if(prioA != prioB) return prioA <=> prioB
+        def trendPriority = ["Heavy Drain": 1, "Moderate": 2, "Stable": 3]
 
-                def levelA = a.currentValue("battery")?.toInteger() ?: 100
-                def levelB = b.currentValue("battery")?.toInteger() ?: 100
-                if(levelA != levelB) return levelA <=> levelB
+        devs = devs.sort { a, b ->
+            def trendA = state.trend[a.id] ?: "Stable"
+            def trendB = state.trend[b.id] ?: "Stable"
+            def prioA = trendPriority[trendA] ?: 3
+            def prioB = trendPriority[trendB] ?: 3
+            if(prioA != prioB) return prioA <=> prioB
 
-                return a.displayName.trim() <=> b.displayName.trim()
-            }
+            def levelA = a.currentValue("battery")?.toInteger() ?: 100
+            def levelB = b.currentValue("battery")?.toInteger() ?: 100
+            if(levelA != levelB) return levelA <=> levelB
 
-            def table="<table style='width:100%; border-collapse: collapse;'>"
-            table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Battery</td><td>Trend</td><td>Day Drain</td>"
+            return a.displayName.trim() <=> b.displayName.trim()
+        }
+
+        def table="<a name='top'></a>"
+        table+="<table style='width:100%; border-collapse: collapse;'>"
+        table+="<tr style='font-weight:bold;'>"
+        table+="<td>Device</td><td>Battery</td><td>Trend</td><td>Day Drain</td>"
+        table+="</tr>"
+
+        devs.each{ device ->
+            def hist = safeHistory(device)
+            def level = device.currentValue("battery")?.toInteger() ?: 100
+            def drain = hist?.drain ?: 0.3
+            def trend = state.trend[device.id] ?: "Unknown"
+            def trendColor = trend == "Heavy Drain" ? "🔴" : trend == "Moderate" ? "🟠" : "🟢"
+            def color = getBatteryLevelDisplay(level, device)
+
+            table+="<tr>"
+            table+="<td>${device.displayName}</td>"
+            table+="<td>${color}</td>"
+            table+="<td>${trendColor} ${trend}</td>"
+            table+="<td>${String.format('%.2f', drain)}</td>"
             table+="</tr>"
+        }
 
-            devs.each{ device ->
-                def hist = safeHistory(device)
-                def level = device.currentValue("battery")?.toInteger() ?: 100
-                def drain = hist?.drain ?: 0.3
-                def trend = state.trend[device.id] ?: "Unknown"
-                def trendColor = trend == "Heavy Drain" ? "🔴" : trend == "Moderate" ? "🟠" : "🟢"
-                def color = getBatteryLevelDisplay(level, device)
+        table+="</table>"
 
-                table+="<tr>"
-                table+="<td>${device.displayName}</td>"
-                table+="<td>${color}</td>"
-                table+="<td>${trendColor} ${trend}</td>"
-                table+="<td>${String.format('%.2f', drain)}</td>"
-                table+="</tr>"
-            }
-
-            table+="</table>"
+        section("") {
             paragraph table
         }
     }
@@ -852,42 +842,44 @@ def trendsPage(){
 def historyPage() {
     dynamicPage(name:"historyPage", title:"Battery Replacement History", install:false){
 
-        // ✅ C8 Pro–safe scroll to bottom
         section("") {
-            paragraph """<script>
-                setTimeout(function(){
-                    window.scrollTo(0, document.body.scrollHeight || document.documentElement.scrollHeight);
-                }, 200);
-            </script>"""
+            paragraph "<div id='top'></div>"
         }
 
         section("Battery Replacement History"){
-            if(!state.replacements || state.replacements.size() == 0){
-                paragraph "No battery replacements have been logged yet."
-                return
-            }
+            paragraph "<b>Replacement Log</b>"
+        }
 
-            def table="<table style='width:100%; border-collapse: collapse;'>"
-            table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
+        if(!state.replacements || state.replacements.size() == 0){
+            section(""){ paragraph "No battery replacements have been logged yet." }
+            return
+        }
+
+        def table="<a name='top'></a>"
+        table+="<table style='width:100%; border-collapse: collapse;'>"
+        table+="<tr style='font-weight:bold;'>"
+        table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
+        table+="</tr>"
+
+        state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->
+            def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
+                          r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
+            table+="<tr>"
+            table+="<td>${r.device}</td>"
+            table+="<td>${r.level}%</td>"
+            table+="<td>${r.date}</td>"
+            table+="<td>${typeTag}</td>"
             table+="</tr>"
+        }
 
-            state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->
-                def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
-                              r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
-                table+="<tr>"
-                table+="<td>${r.device}</td>"
-                table+="<td>${r.level}%</td>"
-                table+="<td>${r.date}</td>"
-                table+="<td>${typeTag}</td>"
-                table+="</tr>"
-            }
+        table+="</table>"
 
-            table+="</table>"
+        section("") {
             paragraph table
         }
     }
 }
+
 // ============================================================
 // ===================== DELETE HISTORY PAGE =================
 // ============================================================

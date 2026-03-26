@@ -696,7 +696,7 @@ def estDays(device) {
 // ============================================================
 // ===================== SUMMARY PAGE ========================
 // ============================================================
-def summaryPage() {
+ef summaryPage() {
     dynamicPage(name:"summaryPage", title:"Battery Summary", install:false){
 
         // 🛑 FIRST RUN PROTECTION
@@ -709,12 +709,6 @@ def summaryPage() {
             return
         }
 
-        // ✅ FORCE TOP RENDER
-        section(" ") { paragraph " " }
-
-        def hubIp = location?.hub?.localIP ?: ""
-
-        // --- SAFE FILTER + SORT ---
         def devs = (autoDevices ?: []).findAll { 
             try { it?.currentValue("battery") != null } catch(e){ return false }
         }.sort { a, b ->
@@ -751,7 +745,7 @@ def summaryPage() {
             def color = getBatteryLevelDisplay(level, device)
 
             table += "<tr>"
-            table += hubIp ? "<td><a href='http://${hubIp}/device/edit/${device.id}' target='_blank'>${name}</a></td>" : "<td>${name}</td>"
+            table += "<td>${name}</td>"
             table += "<td>${color}</td>"
             table += "<td>${String.format('%.2f', drain)}</td>"
             table += "<td>${est}</td>"
@@ -763,12 +757,12 @@ def summaryPage() {
 
         table += "</table>"
 
-        section("") { 
+        // ✅ Only create a section if we have content
+        section("Battery Summary") { 
             paragraph "<div style='white-space:normal !important; overflow-wrap:break-word;'>${table}</div>" 
         }
     }
 }
-
 // ============================================================
 // ===================== TRENDS PAGE =========================
 // ============================================================

@@ -1,13 +1,13 @@
 // ============================================================
-// Battery Monitor 2.0 (TESTER Collaboration)
-// Version 2.4.0 beta 9
+// Battery Monitor 3.0 (TESTER Collaboration)
+// Version 2.4.0 beta 10
 // Author: Jdthomas24
 // Namespace: jdthomas24
 // Description: Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.
 // ============================================================
 
 definition(
-    name: "Battery Monitor 2.0", // DO NOT CHANGE (HPM SAFE)
+    name: "Battery Monitor 3.0", // DO NOT CHANGE (HPM SAFE)
     namespace: "jdthomas24",
     author: "Jdthomas24",
     description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.",
@@ -16,7 +16,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "2.4.0 beta 8"
+    version: "2.4.0 beta 10"
 )
 
 def installed() {
@@ -146,7 +146,7 @@ def mainPage() {
         // ================= Battery Scan Interval =================
         section("Battery Scan Interval") {
             input "scanInterval", "enum",
-                  title: "Scan Frequency",
+                  title: "<b>Scan Frequency:</b>",
                   options: ["1": "Hourly", "3": "Every 3 Hours", "6": "Every 6 Hours"],
                   defaultValue: "3"
         }
@@ -154,18 +154,17 @@ def mainPage() {
         // ================= Report Settings =================
         section("Report Settings") {
             input "reportFrequency", "enum",
-                  title: "Report Frequency",
+                  title: "<b>Notification Frequency:</b>",
                   options: [
-                      "daily": "Daily",
-                      "every2": "Every 2 Days",
-                      "every3": "Every 3 Days",
-                      "weekly": "Weekly",
-                      "critical": "Only When Low Battery (≤25%)"
+                      "daily":   "Daily",
+                      "every2":  "Every 2 Days",
+                      "every3":  "Every 3 Days",
+                      "weekly":  "Weekly"
                   ],
                   defaultValue: "daily"
 
             input "summaryTime", "time",
-                  title: "Report Time (ignored when set to Critical Only — alerts are event-driven)",
+                  title: "<b>Notification Time:<b>",
                   required: false
         }
 
@@ -174,7 +173,7 @@ def mainPage() {
             input "enablePush", "bool", title: "Enable notifications", defaultValue: true
             input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
 
-            paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
+            paragraph "<b>Sections to include with your notification:</b>"
             input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",                              defaultValue: true
             input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",                            defaultValue: true
             input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",                            defaultValue: false
@@ -339,7 +338,7 @@ def scheduledSummary() {
             msg += "None\n"
         }
     }
-    
+
     // Optionally suppress if nothing actionable to report
     if (suppressEmptyReport != null ? suppressEmptyReport : false) {
         def hasContent = categories.any { cat, data -> data.enabled && data.list } ||
@@ -526,14 +525,14 @@ def updateTrend(device, drain){
     else state.trend[device.id] = "Heavy Drain"
 }
 
-def getDrain(device){ return state.history?.get(device.id)?.drain ?:0.3 }
-def displayDrain(device){ return String.format("%.2f",getDrain(device)) }
+def getDrain(device){ return state.history?.get(device.id)?.drain ?: 0.3 }
+def displayDrain(device){ return String.format("%.2f", getDrain(device)) }
 def estDays(device){
     def level = device.currentValue("battery")?.toInteger()
     level = level != null ? level : 100
     def drain = getDrain(device)
     if (drain <= 0) drain = 0.3
-    return Math.round(level/drain)
+    return Math.round(level / drain)
 }
 def health(device){
     def drain = getDrain(device)
@@ -573,7 +572,7 @@ def safeHistory(device){
 }
 
 def getLastBatteryTime(device){ return safeTime(state.history[device.id]?.lastDate) }
-def getLastActivityTime(device){ 
+def getLastActivityTime(device){
     def last = device.getLastActivity()
     return safeTime(last)
 }
@@ -1063,12 +1062,11 @@ def manualReplacementConfirmPage() {
                         state.replacements = state.replacements?.findAll { it.device != device.displayName } ?: []
 
                         // Log the manual replacement
-                       // tag as manual
-                          state.replacements << [
-                          device: device.displayName,
-                          level: level,
-                          date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
-                          type: "manual"
+                        state.replacements << [
+                            device: device.displayName,
+                            level: level,
+                            date: new Date().format("yyyy-MM-dd HH:mm", location.timeZone),
+                            type: "manual"
                         ]
 
                         // Sort descending by date
@@ -1080,8 +1078,6 @@ def manualReplacementConfirmPage() {
                         state.trend[device.id] = "Stable"
                         state.history[device.id].lastLevel = 100
                         state.history[device.id].lastDate = now()
-
-                        // THIS IS THE MISSING PIECE
                         state.history[device.id].justReplaced = true
                         state.history[device.id].replacedTime = now()
 

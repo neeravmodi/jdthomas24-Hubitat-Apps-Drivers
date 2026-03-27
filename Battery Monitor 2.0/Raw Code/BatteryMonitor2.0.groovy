@@ -1,6 +1,6 @@
 // ============================================================
 // Battery Monitor 2.0 (TESTER Collaboration)
-// Version 2.4.0 beta 10
+// Version 2.4.0 beta 12N
 // Author: Jdthomas24
 // Namespace: jdthomas24
 // Description: Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.
@@ -16,7 +16,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "2.4.0 beta 10"
+    version: "2.4.0 beta 12N"
 )
 
 def installed() {
@@ -86,7 +86,9 @@ preferences {
     page(name:"manualReplacementPage")
     page(name:"manualReplacementConfirmPage")
     page(name:"infoPage")
+    page(name:"batteryCatalogPage")
 }
+
 // ============================================================
 // ===================== MAIN PAGE ===========================
 // ============================================================
@@ -193,10 +195,11 @@ def mainPage() {
 
         // ================= Reports =================
         section("Reports") {
-            href "summaryPage", title: "Battery Summary"
-            href "trendsPage", title: "Battery Trends"
-            href "historyPage", title: "Battery Replacement History"
+            href "summaryPage",           title: "Battery Summary"
+            href "trendsPage",            title: "Battery Trends"
+            href "historyPage",           title: "Battery Replacement History"
             href "manualReplacementPage", title: "Manual Battery Replacement"
+            href "batteryCatalogPage",    title: "🔋 Battery Catalog"
         }
 
         // ================= Help & Info =================
@@ -300,8 +303,8 @@ def scheduledSummary() {
             if (data.list) {
                 data.list.each { dev ->
                     if (cat == "🔴 Poor") {
-                        def size = getBatteryInfo(dev.device)
-                        def infoStr = size ? " (${size})" : ""
+                        def info = getCatalogBatteryInfo(dev.device) ?: getBatteryInfo(dev.device)
+                        def infoStr = info ? " (${info})" : ""
                         msg += "• ${dev.level}% ${dev.name}${infoStr}\n"
                     } else {
                         msg += "• ${dev.level}% ${dev.name}\n"
@@ -330,8 +333,8 @@ def scheduledSummary() {
         msg += "\n⚠️ Stale Devices:\n"
         if (staleDevices) {
             staleDevices.each { d ->
-                def size = getBatteryInfo(d.device)
-                def infoStr = size ? " (${size})" : ""
+                def info = getCatalogBatteryInfo(d.device) ?: getBatteryInfo(d.device)
+                def infoStr = info ? " (${info})" : ""
                 msg += "• ${d.name}${infoStr} — no activity for ${d.hours}h\n"
             }
         } else {
@@ -583,6 +586,12 @@ def getBatteryInfo(device) {
     return size
 }
 
+def getCatalogBatteryInfo(device) {
+    if (!device) return null
+    def info = settings["battInfo_${device.id}"]
+    return (info && info != "") ? info : null
+}
+
 def isStale(device){
     def lastActivity = getLastActivityTime(device)
     if(!lastActivity) return false
@@ -680,7 +689,7 @@ def logReplacement(device, newLevel, manual=false){
 // ============================================================
 // ===================== SUMMARY PAGE ========================
 // ============================================================
-	def summaryPage(){
+def summaryPage(){
     dynamicPage(name:"summaryPage", title:"Battery Summary", install:false){
 
         // 🛑 FIRST RUN PROTECTION (more robust)
@@ -730,7 +739,7 @@ def logReplacement(device, newLevel, manual=false){
 
             def table = "<table style='width:100%; border-collapse: collapse;'>"
             table += "<tr style='font-weight:bold;'>"
-            table += "<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
+            table += "<td>Device</td><td>Battery</td><td>Batt Info</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
             table += "</tr>"
 
             devs.each { device ->
@@ -739,6 +748,9 @@ def logReplacement(device, newLevel, manual=false){
                 def level = null
                 try { level = device.currentValue("battery")?.toInteger() } catch(e) {}
                 level = level != null ? level : 100
+
+                def catalogInfo = ""
+                try { catalogInfo = getCatalogBatteryInfo(device) ?: "" } catch(e) {}
 
                 def drain = 0.3
                 try { drain = getDrain(device) } catch(e) {}
@@ -793,6 +805,7 @@ def logReplacement(device, newLevel, manual=false){
                 }
 
                 table += "<td>${color}</td>"
+                table += "<td>${catalogInfo}</td>"
                 table += "<td>${String.format('%.2f', drain)}</td>"
                 table += "<td>${est}</td>"
                 table += "<td>${h}</td>"
@@ -1097,6 +1110,49 @@ def manualReplacementConfirmPage() {
         }
     }
 }
+
+// ============================================================
+// ===================== BATTERY CATALOG PAGE ================
+// ============================================================
+def batteryCatalogPage() {
+    dynamicPage(name: "batteryCatalogPage", title: "🔋 Battery Catalog", install: false) {
+
+        def devs = (autoDevices ?: []).sort { a, b -> a.displayName.trim() <=> b.displayName.trim() }
+
+        if (!devs) {
+            section() {
+                paragraph "No devices found. Please select devices on the main page first."
+            }
+            return
+        }
+
+        // Build combined options list
+        def batteryTypes = ["AA", "AAA", "C", "D", "9V",
+                            "CR2032", "CR2450", "CR2430", "CR2016",
+                            "CR123A", "CR17345", "18650", "Other"]
+        def quantities = ["1", "2", "3", "4", "6", "8"]
+
+        def options = ["": "— Not Set —"]
+        batteryTypes.each { type ->
+            quantities.each { qty ->
+                def key = "${type} x${qty}"
+                options[key] = key
+            }
+        }
+
+        section("Select battery for each device. Tap Done to save.") {
+            devs.each { device ->
+                input "battInfo_${device.id}",
+                      "enum",
+                      title: "${device.displayName.trim()}",
+                      options: options,
+                      required: false,
+                      defaultValue: settings["battInfo_${device.id}"] ?: ""
+            }
+        }
+    }
+}
+
 // ============================================================
 // ===================== INFO PAGE ===========================
 // ============================================================

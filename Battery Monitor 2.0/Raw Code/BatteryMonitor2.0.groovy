@@ -146,17 +146,17 @@ def mainPage() {
         }
 
         // ================= Battery Scan Interval =================
-        section("Battery Scan Interval") {
+        section("<b>Battery Scan Interval</b>") {
             input "scanInterval", "enum",
-                  title: "<b>Scan Frequency:</b>",
+                  title: "Scan Frequency:(Used to calculate trends and battery analytics)",
                   options: ["1": "Hourly", "3": "Every 3 Hours", "6": "Every 6 Hours"],
                   defaultValue: "3"
         }
 
         // ================= Report Settings =================
-        section("Report Settings") {
+        section("<b>Notification Settings</b>") {
             input "reportFrequency", "enum",
-                  title: "<b>Notification Frequency:</b>",
+                  title: "Notification Frequency:",
                   options: [
                       "daily":   "Daily",
                       "every2":  "Every 2 Days",
@@ -166,35 +166,35 @@ def mainPage() {
                   defaultValue: "daily"
 
             input "summaryTime", "time",
-                  title: "<b>Notification Time:<b>",
+                  title: "Notification Time:",
                   required: false
         }
 
         // ================= Notifications =================
-        section("Notifications") {
+        section("<b>Notification Data (Notification toggle must be on to receive</b>)") {
             input "enablePush", "bool", title: "Enable notifications", defaultValue: true
             input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
 
-            paragraph "<b>Sections to include with your notification:</b>"
+            paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
             input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",                              defaultValue: true
             input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",                            defaultValue: true
             input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",                            defaultValue: false
             input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)",                         defaultValue: false
-            input "notifyHighDrain", "bool", title: "⚠️ Include Health (High Drain - Fair or Poor, drain > 0.7%/day)", defaultValue: true
+            input "notifyHighDrain", "bool", title: "⚠️ Include Health (Fair, Poor, & High Drain Only)", defaultValue: true
 
             input "notifyStale",     "bool", title: "⚠️ Include Stale Devices",                            defaultValue: true
             input "staleThresholdHours", "number",
-                  title: "Mark device as stale if no activity for X hours",
+                  title: "<b>Mark device as stale if no activity for X hours</b>",
                   defaultValue: 24
-            input "notifyIncludeAppLink", "bool", title: "🔗 Include link to Battery Monitor app",         defaultValue: false
-            input "suppressEmptyReport", "bool", title: "🔕 Don't send notification if nothing to report", defaultValue: false
+            input "suppressEmptyReport", "bool", title: "🔕 Don't send notification if nothing to report <b>(Skips Notification entirely when all enabled toggles are Empty)</b>", defaultValue: false
+            input "notifyIncludeAppLink", "bool", title: "🔗 Include link to Battery Monitor app <b>(Local Only)</b>",         defaultValue: false
 
             paragraph "<b>Send notification now:</b>"
-            input "sendNow", "bool", title: "📤 Send Notification Now (tap, then click Done)",             defaultValue: false
+            input "sendNow", "bool", title: "📤 Send Notification Now <b>(toggle on then click Done)</b>",             defaultValue: false
         }
 
         // ================= Reports =================
-        section("Reports") {
+        section("<b>Reports:<b/>") {
             href "summaryPage",           title: "Battery Summary"
             href "trendsPage",            title: "Battery Trends"
             href "historyPage",           title: "Battery Replacement History"
@@ -203,7 +203,7 @@ def mainPage() {
         }
 
         // ================= Help & Info =================
-        section("Help & Info") {
+        section("<b>Help & Info:</b>") {
             href "infoPage",
                  title: "Battery Health Guide",
                  description: "Learn what battery drain, health, and trends mean"
@@ -303,7 +303,7 @@ def scheduledSummary() {
             if (data.list) {
                 data.list.each { dev ->
                     if (cat == "🔴 Poor") {
-                        def info = getCatalogBatteryInfo(dev.device) ?: getBatteryInfo(dev.device)
+                        def info = getCatalogBatteryInfo(dev.device)
                         def infoStr = info ? " (${info})" : ""
                         msg += "• ${dev.level}% ${dev.name}${infoStr}\n"
                     } else {
@@ -333,10 +333,10 @@ def scheduledSummary() {
         msg += "\n⚠️ Stale Devices:\n"
         if (staleDevices) {
             staleDevices.each { d ->
-                def info = getCatalogBatteryInfo(d.device) ?: getBatteryInfo(d.device)
+                def info = getCatalogBatteryInfo(d.device)
                 def infoStr = info ? " (${info})" : ""
                 msg += "• ${d.name}${infoStr} — no activity for ${d.hours}h\n"
-            }
+			}
         } else {
             msg += "None\n"
         }
@@ -367,8 +367,8 @@ def scheduledSummary() {
 def sendCriticalReport(device, level) {
     def msg = "🔴 Low Battery Alert\n\n${device.displayName} is at ${level}%."
 
-    def size = getBatteryInfo(device)
-    if (size) msg += " (${size})"
+    def info = getCatalogBatteryInfo(device)
+    if (info) msg += " (${info})"
 
     if (enablePush) sendPush(msg)
     if (notifyDevices) notifyDevices.each { it.deviceNotification(msg) }
@@ -580,12 +580,6 @@ def getLastActivityTime(device){
     return safeTime(last)
 }
 
-def getBatteryInfo(device) {
-    def data = device.getData()
-    def size = data?.BatterySize ?: data?.batterySize ?: null
-    return size
-}
-
 def getCatalogBatteryInfo(device) {
     if (!device) return null
     def info = settings["battInfo_${device.id}"]
@@ -739,10 +733,10 @@ def summaryPage(){
 
             def table = "<table style='width:100%; border-collapse: collapse;'>"
             table += "<tr style='font-weight:bold;'>"
-            table += "<td>Device</td><td>Battery</td><td>Batt Info</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td>"
+            table += "<td>Device</td><td>Battery</td><td>Drain</td><td>Est Days</td><td>Health</td><td>Last Battery</td><td>Last Activity</td><td>Battery Type</td>"
             table += "</tr>"
 
-            devs.each { device ->
+            devs.eachWithIndex { device, idx ->
 
                 // ✅ SAFE VALUE EXTRACTION
                 def level = null
@@ -796,7 +790,8 @@ def summaryPage(){
                 // ✅ SAFE device name
                 def name = device.displayName ?: "Unknown Device"
 
-                table += "<tr>"
+                def rowBg = idx % 2 == 0 ? "#d6e4f0" : "#ffffff"
+                table += "<tr style='background-color:${rowBg};'>"
 
                 if(hubIp){
                     table += "<td><a href='http://${hubIp}/device/edit/${device.id}' target='_blank'>${name}</a></td>"
@@ -805,12 +800,12 @@ def summaryPage(){
                 }
 
                 table += "<td>${color}</td>"
-                table += "<td>${catalogInfo}</td>"
                 table += "<td>${String.format('%.2f', drain)}</td>"
                 table += "<td>${est}</td>"
                 table += "<td>${h}</td>"
                 table += "<td>${lastBatteryStr}</td>"
                 table += "<td>${lastActivityStr}${staleTag}</td>"
+                table += "<td>${catalogInfo}</td>"
                 table += "</tr>"
             }
 
@@ -865,7 +860,7 @@ def trendsPage(){
             table+="<td>Device</td><td>Battery</td><td>Trend</td><td>Day Drain</td>"
             table+="</tr>"
 
-            devs.each{ device ->
+            devs.eachWithIndex { device, idx ->
                 def hist = safeHistory(device)
                 def level = device.currentValue("battery")?.toInteger() ?: 100
                 def drain = hist?.drain ?: 0.3
@@ -878,7 +873,8 @@ def trendsPage(){
                 // Battery color display
                 def color = getBatteryLevelDisplay(level, device)
 
-                table+="<tr>"
+                def rowBg = idx % 2 == 0 ? "#d6e4f0" : "#ffffff"
+                table+="<tr style='background-color:${rowBg};'>"
                 table+="<td>${device.displayName}</td>"
                 table+="<td>${color}</td>"
                 table+="<td>${trendColor} ${trend}</td>"
@@ -1127,28 +1123,43 @@ def batteryCatalogPage() {
         }
 
         // Build combined options list
-        def batteryTypes = ["AA", "AAA", "C", "D", "9V",
-                            "CR2032", "CR2450", "CR2430", "CR2016",
-                            "CR123A", "CR17345", "18650", "Other"]
-        def quantities = ["1", "2", "3", "4", "6", "8"]
-
         def options = ["": "— Not Set —"]
-        batteryTypes.each { type ->
+		
+        def typeQuantities = [
+            "AA":      ["1", "2", "3", "4", "6", "8"],
+            "AAA":     ["1", "2", "3", "4", "6", "8"],
+            "CR2016":  ["1", "2"],
+            "CR2032":  ["1", "2"],
+            "CR2430":  ["1", "2"],
+            "CR2450":  ["1"],
+            "CR123A":  ["1", "2"],
+            "18650":   ["1", "2"],
+            "9V":      ["1"],
+            "Other":   ["1", "2", "3", "4", "6", "8"]
+        ]
+		
+        typeQuantities.each { type, quantities ->
             quantities.each { qty ->
                 def key = "${type} x${qty}"
                 options[key] = key
             }
         }
+        
+		section() {
+			paragraph "Select battery type and quantity for each device. Tap Done to save."
+		}
 
-        section("Select battery for each device. Tap Done to save.") {
+        section("Select battery type and quantity for each device. Tap Done to save.") {
             devs.each { device ->
-                input "battInfo_${device.id}",
-                      "enum",
-                      title: "${device.displayName.trim()}",
-                      options: options,
-                      required: false,
-                      defaultValue: settings["battInfo_${device.id}"] ?: ""
-            }
+                section() {
+                    input "battInfo_${device.id}",
+                          "enum",
+                          title: "<b>${device.displayName.trim()}</b>",
+                          options: options,
+                          required: false,
+                          defaultValue: settings["battInfo_${device.id}"] ?: ""
+				}
+			}
         }
     }
 }
@@ -1157,46 +1168,65 @@ def batteryCatalogPage() {
 // ===================== INFO PAGE ===========================
 // ============================================================
 def infoPage(Map params = [:]){
-    dynamicPage(name:"infoPage", title:"Battery Health Guide", install:false){
+    dynamicPage(name:"infoPage", title:"Battery Monitoring Guide", install:false){
         
-        // ✅ Updated note to reflect consistent colors
         section("<b>Note on Colors</b>") {
-            paragraph "⚠ Colors in battery reports reflect battery percentage (🔴 low, 🟠 medium, 🟢 good), while health ratings also use the same color system for consistency (🟢 Excellent/Good, 🟠 Fair, 🔴 Poor)."
+            paragraph "⚠ Battery colors reflect battery percentage levels: 🟢 100% = Excellent, 🟢 71–99% = Good, 🟠 26–70% = Fair, 🔴 ≤25% = Poor.<br>Health ratings use the same colors but are based on drain rate, not battery %."
         }
 
         section("<b>Battery Health Breakdown</b>"){
             def table = """<table style='width:100%; border-collapse: collapse;'>
-<tr style='font-weight:bold;'><td>Health</td><td>Drain Rate (per day)</td><td>What It Means</td></tr>
-<tr><td>🟢 Excellent</td><td>&lt; 0.3%</td><td>Battery is barely draining (very efficient device)</td></tr>
-<tr><td>🟢 Good</td><td>0.3 – 0.7%</td><td>Normal battery usage</td></tr>
-<tr><td>🟠 Fair</td><td>0.7 – 1.2%</td><td>Higher-than-normal drain</td></tr>
-<tr><td>🔴 Poor</td><td>&gt; 1.2%</td><td>Battery draining fast (problem likely)</td></tr>
+<tr style='font-weight:bold;'>
+<td>Health</td>
+<td>Drain Rate (per day)</td>
+<td>What It Means</td>
+</tr>
+<tr>
+<td>🟢 Excellent</td>
+<td>&lt; 0.3%</td>
+<td>Very efficient device, minimal drain</td>
+</tr>
+<tr>
+<td>🟢 Good</td>
+<td>0.3 – 0.7%</td>
+<td>Normal battery usage</td>
+</tr>
+<tr>
+<td>🟠 Fair</td>
+<td>0.7 – 1.2%</td>
+<td>Above average drain</td>
+</tr>
+<tr>
+<td>🔴 Poor</td>
+<td>&gt; 1.2%</td>
+<td>High drain, likely issue</td>
+</tr>
 </table>"""
             paragraph table
         }
 
         section("<b>🔍 What is Battery Drain?</b>"){ 
-            paragraph "Battery drain shows how fast a device uses battery (% per day). Lower values mean longer battery life. Higher values may indicate excessive usage, weak signal, or device issues." 
+            paragraph "Battery drain shows how fast a device uses battery (% per day). Lower values mean longer battery life. Higher values may indicate excessive usage, weak signal, or device issues. Drain is calculated as an average over time, not a real-time measurement."
         }
         
         section("<b>📅 How Estimated Days Works</b>"){ 
-            paragraph "Estimated days remaining is calculated using the current battery level divided by the average daily drain rate. This becomes more accurate after multiple battery reports." 
+            paragraph "Estimated days remaining is calculated using current battery level divided by average daily drain rate. This is an estimate only and may vary depending on usage. Accuracy improves with more battery reports over time."
         }
         
         section("<b>📊 Understanding Trends</b>"){ 
-            paragraph "Trends are calculated using recent battery activity. Devices need multiple battery reports before trends become accurate.\n• Stable = very low drain\n• Moderate = normal usage\n• Heavy Drain = higher-than-normal usage" 
+            paragraph "Trends are based on recent battery activity and require multiple reports before becoming reliable.<br>• Stable = low drain<br>• Moderate = normal usage<br>• Heavy Drain = elevated usage"
         }
         
         section("<b>🔋 Battery Replacement Detection</b>"){ 
-            paragraph "The app automatically detects battery replacement when a device jumps from ≤40% to ≥95%. Manual replacement can be used if a battery is changed outside this range.\n\nAfter a battery is replaced, the device will be marked as 'Recently Replaced'. This tag will automatically clear after about 24 hours or once the device reports again." 
+            paragraph "Battery replacement is automatically detected when a device jumps from ≤40% to ≥95%. Manual replacement can be used if a battery is replaced outside this range.<br><br>Battery % represents current charge, while health represents how fast that charge is being used.<br><br>After replacement, the device is marked 'Recently Replaced' and will clear after ~24 hours or the next report."
         }
         
         section("<b>⚠ Troubleshooting High Drain</b>"){ 
-            paragraph "If a device shows high drain:\n• Check signal strength (Z-Wave/Zigbee routing)\n• Verify device isn't reporting too frequently\n• Confirm correct battery type is used\n• Look for environmental factors (cold, humidity)\n• Consider device firmware or driver issues" 
+            paragraph "If a device shows high drain:<br>• Check signal strength (routing)<br>• Verify reporting frequency<br>• Confirm correct battery type<br>• Consider environmental factors<br>• Review device firmware/driver<br><br>Note: Infrequent reporting or poor connectivity can affect drain calculations."
         }
         
         section("<b>💡 Tips</b>"){ 
-            paragraph "• Devices with consistent low drain are healthy\n• Sudden spikes usually indicate a problem\n• Compare similar devices to identify outliers\n" 
+            paragraph "• Consistent low drain = healthy device<br>• Sudden spikes indicate issues<br>• Compare similar devices to identify outliers<br>• Devices with few reports may have less accurate trends and estimates"
         }
     }
 }

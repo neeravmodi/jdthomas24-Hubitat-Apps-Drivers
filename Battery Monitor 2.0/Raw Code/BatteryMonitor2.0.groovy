@@ -1,6 +1,6 @@
 // ============================================================
 // Battery Monitor 2.0 (TESTER Collaboration)
-// Version 2.4.0 beta 12N
+// Version 2.4.0 beta 13
 // Author: Jdthomas24
 // Namespace: jdthomas24
 // Description: Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.3.2). Auto-adjusts drain for low-activity devices.
@@ -16,7 +16,7 @@ definition(
     iconUrl: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery.png",
     iconX2Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
     iconX3Url: "https://raw.githubusercontent.com/hubitat/HubitatPublic/master/examples/icons/battery@2x.png",
-    version: "2.4.0 beta 12N"
+    version: "2.4.0 beta 13"
 )
 
 def installed() {
@@ -153,44 +153,56 @@ def mainPage() {
                   defaultValue: "3"
         }
 
-        // ================= Report Settings =================
-        section("<b>Notification Settings</b>") {
-            input "reportFrequency", "enum",
-                  title: "Notification Frequency:",
-                  options: [
-                      "daily":   "Daily",
-                      "every2":  "Every 2 Days",
-                      "every3":  "Every 3 Days",
-                      "weekly":  "Weekly"
-                  ],
-                  defaultValue: "daily"
-
-            input "summaryTime", "time",
-                  title: "Notification Time:",
-                  required: false
-        }
-
         // ================= Notifications =================
-        section("<b>Notification Data (Notification toggle must be on to receive</b>)") {
-            input "enablePush", "bool", title: "Enable notifications", defaultValue: true
-            input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
+        section("<b>Notifications (Toggle must be on to receive notifications)</b>") {
+            input "enablePush", "bool", title: "Enable notifications", defaultValue: true, submitOnChange: true
 
-            paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
-            input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",                              defaultValue: true
-            input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",                            defaultValue: true
-            input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",                            defaultValue: false
-            input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)",                         defaultValue: false
-            input "notifyHighDrain", "bool", title: "⚠️ Include Health (Fair, Poor, & High Drain Only)", defaultValue: true
+			// Notification Options
+			if (enablePush) {
+                input "reportFrequency", "enum",
+                      title: "Notification Frequency:",
+                      options: [
+                          "daily":   "Daily",
+                          "every2":  "Every 2 Days",
+                          "every3":  "Every 3 Days",
+                          "weekly":  "Weekly"
+                      ],
+                      defaultValue: "daily"
+	
+                input "summaryTime", "time",
+                      title: "Notification Time:",
+                      required: false
 
-            input "notifyStale",     "bool", title: "⚠️ Include Stale Devices",                            defaultValue: true
-            input "staleThresholdHours", "number",
-                  title: "<b>Mark device as stale if no activity for X hours</b>",
-                  defaultValue: 24
-            input "suppressEmptyReport", "bool", title: "🔕 Don't send notification if nothing to report <b>(Skips Notification entirely when all enabled toggles are Empty)</b>", defaultValue: false
-            input "notifyIncludeAppLink", "bool", title: "🔗 Include link to Battery Monitor app <b>(Local Only)</b>",         defaultValue: false
+				// Notification Devices
+				input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
+				
+				// Pushover
+				input "enablePushover", "bool", title: "⚙️ Enable Pushover markup", defaultValue: false, submitOnChange: true
+				if (enablePushover) {
+					input "pushoverPrefix", "text",
+						  title: "Pushover tags",
+						  description: "Pushover-specific additions to the Battery Monitor notifications, e.g. [H][TITLE=Battery Report][HTML][SELFDESTRUCT=43200]",
+						  required: false
+				}
 
-            paragraph "<b>Send notification now:</b>"
-            input "sendNow", "bool", title: "📤 Send Notification Now <b>(toggle on then click Done)</b>",             defaultValue: false
+				// Notification Options / Configuration
+				paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
+				input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",                              defaultValue: true
+				input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",                            defaultValue: true
+				input "notifyGood",      "bool", title: "🟢 Include Good (71–99%)",                            defaultValue: false
+				input "notifyExcellent", "bool", title: "🟢 Include Excellent (100%)",                         defaultValue: false
+				input "notifyHighDrain", "bool", title: "⚠️ Include Health (Fair, Poor, & High Drain Only)",   defaultValue: true
+	
+				input "notifyStale",     "bool", title: "⚠️ Include Stale Devices",                            defaultValue: true
+				input "staleThresholdHours", "number",
+					  title: "<b>Mark device as stale if no activity for X hours</b>",
+					  defaultValue: 24
+				input "suppressEmptyReport", "bool", title: "🔕 Don't send notification if nothing to report <b>(Skips Notification entirely when all enabled toggles are Empty)</b>", defaultValue: false
+				input "notifyIncludeAppLink", "bool", title: "🔗 Include link to Battery Monitor app <b>(Local Only)</b>",         defaultValue: false
+	
+				paragraph "<b>Send notification now:</b>"
+				input "sendNow", "bool", title: "📤 Send Notification Now <b>(toggle on then click Done)</b>", defaultValue: false
+        	}
         }
 
         // ================= Reports =================
@@ -289,7 +301,8 @@ def scheduledSummary() {
     }
 
     // ---- Build message — only include enabled categories ----
-    def msg = "🔋 Battery Summary\n"
+    def prefix = (enablePushover && pushoverPrefix?.trim()) ? "${pushoverPrefix.trim()}\n" : ""
+    def msg = "${prefix}🔋 Battery Summary\n"
     def staleDevices = devs.findAll { isStale(it) }.collect {
         def last = getLastActivityTime(it)
         def hours = last ? ((now() - last) / (1000*60*60)).toInteger() : 0
@@ -353,7 +366,11 @@ def scheduledSummary() {
     // Optionally append link to the Battery Monitor app
     if (notifyIncludeAppLink != null ? notifyIncludeAppLink : false) {
         def hubIp = location.hub.localIP
-        msg += "\n🔗 Battery Monitor: http://${hubIp}/installedapp/configure/${app.id}/mainPage"
+    	if (enablePushover && msg.contains("[HTML]")) {
+            msg += "\n🔗 <a href='http://${hubIp}/installedapp/configure/${app.id}/mainPage'>Battery Monitor</a>"
+    	} else {
+            msg += "\n🔗 Battery Monitor: http://${hubIp}/installedapp/configure/${app.id}/mainPage"
+        }
     }
 
     // Send notifications — always send if at least one category is enabled
@@ -365,7 +382,8 @@ def scheduledSummary() {
 // ===================== CRITICAL ALERTS =====================
 // ============================================================
 def sendCriticalReport(device, level) {
-    def msg = "🔴 Low Battery Alert\n\n${device.displayName} is at ${level}%."
+    def prefix = (enablePushover && pushoverPrefix?.trim()) ? "${pushoverPrefix.trim()}\n" : ""
+    def msg = "${prefix}🔴 Low Battery Alert\n\n${device.displayName} is at ${level}%."
 
     def info = getCatalogBatteryInfo(device)
     if (info) msg += " (${info})"
@@ -580,6 +598,8 @@ def getLastActivityTime(device){
     return safeTime(last)
 }
 
+def sortName = { name -> name?.replaceAll(/^_+/, "").toLowerCase() ?: "" }
+
 def getCatalogBatteryInfo(device) {
     if (!device) return null
     def info = settings["battInfo_${device.id}"]
@@ -602,6 +622,7 @@ def formatTimeAgo(ts){
     def mins = (diffMs / (1000*60)).toInteger()
     return mins < 60 ? "${mins}m ago" : "${(mins/60).toInteger()}h ago"
 }
+
 // ============================================================
 // ===================== BATTERY DISPLAY =====================
 // ============================================================
@@ -908,14 +929,23 @@ def historyPage() {
 
             def table="<table style='width:100%; border-collapse: collapse;'>"
             table+="<tr style='font-weight:bold;'>"
-            table+="<td>Device</td><td>Level</td><td>Date</td><td>Type?</td>"
+            table+="<td>Device</td><td>Battery Type</td><td>Level</td><td>Date</td><td>Type?</td>"
             table+="</tr>"
 
-            state.replacements.sort{ a,b -> b.date <=> a.date }.each{ r ->
-                def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
-                              r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
-                table+="<tr>"
+
+			state.replacements.sort{ a,b -> b.date <=> a.date }.eachWithIndex{ r, idx ->
+				def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
+							  r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
+				def rowBg = idx % 2 == 0 ? "#d6e4f0" : "#ffffff"
+
+				// Look up device object by name to get catalog info
+				def dev = autoDevices?.find { it.displayName == r.device }
+				def info = dev ? getCatalogBatteryInfo(dev) : null
+				def infoStr = info ? "${info}" : ""
+
+				table+="<tr style='background-color:${rowBg};'>"
                 table+="<td>${r.device}</td>"
+                table+="<td>${infoStr}</td>"
                 table+="<td>${r.level}%</td>"
                 table+="<td>${r.date}</td>"
                 table+="<td>${typeTag}</td>"
@@ -1135,6 +1165,14 @@ def batteryCatalogPage() {
             "CR123A":  ["1", "2"],
             "18650":   ["1", "2"],
             "9V":      ["1"],
+            "x ----- Rechargeable -----":      [""],
+            "Rechargeable AA":      ["1", "2", "3", "4", "6", "8"],
+            "Rechargeable AAA":     ["1", "2", "3", "4", "6", "8"],
+            "LIR2016":  ["1", "2"],
+            "LIR2032":  ["1", "2"],
+            "LIR2430":  ["1", "2"],
+            "LIR2450":  ["1"],
+            "x ----- Other -----":      [""],
             "Other":   ["1", "2", "3", "4", "6", "8"]
         ]
 		

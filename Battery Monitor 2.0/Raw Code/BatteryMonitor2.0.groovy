@@ -598,8 +598,6 @@ def getLastActivityTime(device){
     return safeTime(last)
 }
 
-def sortName = { name -> name?.replaceAll(/^_+/, "").toLowerCase() ?: "" }
-
 def getCatalogBatteryInfo(device) {
     if (!device) return null
     def info = settings["battInfo_${device.id}"]

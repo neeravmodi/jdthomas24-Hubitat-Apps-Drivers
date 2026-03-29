@@ -2,12 +2,12 @@ definition(
     name: "Battery Monitor 2.0",
     namespace: "jdthomas24",
     author: "Jdthomas24",
-    description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.4.0b24). Recurring scan schedule, confidence-weighted health, EWMA smoothing.",
+    description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.4.0b26). Recurring scan schedule, confidence-weighted health, EWMA smoothing.",
     category: "Convenience",
     importUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
     iconUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Tests%20-%20Groovy%20RAW/Battery%20Monitor%202.0%20BETA%20Tests",
     iconX2Url: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
-    version: "2.4.0 beta 15"
+    version: "2.4.0 beta 26"
 )
 
 def installed() {
@@ -37,11 +37,6 @@ def updated() {
         app.updateSetting("sendNow", [value: false, type: "bool"])
     }
 
-    if (settings?.forceScanNow) {
-        scanAllDevices()
-        app.updateSetting("forceScanNow", [value: false, type: "bool"])
-        log.debug "Manual scan triggered by user"
-    }
 }
 
 def initialize() {
@@ -80,6 +75,7 @@ preferences {
     page(name: "manualReplacementConfirmPage")
     page(name: "infoPage")
     page(name: "batteryCatalogPage")
+    page(name: "forceScanPage")
 }
 
 // ============================================================
@@ -729,10 +725,7 @@ def summaryPage() {
 
         section("") {
             paragraph "<span style='color:red; font-weight:bold;'>⚠ Device links below are accessible only on your local network (LAN). They will not work remotely.</span>"
-            input "forceScanNow", "bool",
-                  title: "🔄 Force Scan Now — toggle on then click Done to immediately read all device battery levels",
-                  defaultValue: false,
-                  submitOnChange: false
+            href "forceScanPage", title: "🔄 Force Scan Now", description: "Tap to immediately read battery levels from all monitored devices"
 
             // FIX #8: Use local devList instead of reassigning autoDevices
             def devList = (autoDevices ?: []).findAll {
@@ -879,10 +872,7 @@ def trendsPage() {
         }
 
         section("") {
-            input "forceScanNow", "bool",
-                  title: "🔄 Force Scan Now — toggle on then click Done to immediately read all device battery levels",
-                  defaultValue: false,
-                  submitOnChange: false
+            href "forceScanPage", title: "🔄 Force Scan Now", description: "Tap to immediately read battery levels from all monitored devices"
             // FIX #8: Use local devList instead of reassigning autoDevices
             def devList = (autoDevices ?: []).findAll { it?.currentValue("battery") != null }
 
@@ -1156,6 +1146,29 @@ def manualReplacementConfirmPage() {
 }
 
 // ============================================================
+// ===================== FORCE SCAN PAGE =====================
+// ============================================================
+def forceScanPage() {
+    scanAllDevices()
+    log.debug "Manual battery scan triggered by user"
+
+    dynamicPage(name: "forceScanPage", title: "Force Scan", install: false) {
+        section("") {
+            paragraph rawHtml: true, "<script>focusOnFirstEmptyTextInput = function() {};</script>"
+        }
+        section("<b>Scan Complete</b>") {
+            def devList = autoDevices ?: []
+            def count   = devList.size()
+            paragraph "✅ Battery scan complete — ${count} device(s) read. " +
+                      "Return to Battery Summary or Trends to see updated values.<br><br>" +
+                      "<b>Note:</b> A new drain sample is only recorded if the battery level " +
+                      "has changed since the last reading. Devices reporting the same level " +
+                      "will not generate a new sample."
+        }
+    }
+}
+
+// ============================================================
 // ===================== BATTERY CATALOG PAGE ================
 // ============================================================
 def batteryCatalogPage() {
@@ -1285,11 +1298,22 @@ def infoPage(Map params = [:]) {
                       "• At least <b>5 drain samples</b> collected — shown as ⏳ Pending (X/5 samples) in the Health column of the Summary and Trends pages<br>" +
                       "• At least <b>5 days</b> since the battery was replaced or first seen<br><br>" +
                       "Once both gates pass, a confidence-weighted verdict is calculated from the real data. " +
-                      "Samples accumulate from scheduled scans and device-triggered battery events — more frequent scans mean faster maturity.<br><br>" +
-                      "<b>Tip for slow-reporting devices:</b> Some devices only report battery every few days or only when the level changes. " +
-                      "If a device is stuck on Pending, use the <b>Force Scan Now</b> toggle on the Battery Summary or Trends page to immediately read all devices. " +
-                      "Note that a scan can only generate a new sample if the battery level has changed since the last reading — " +
-                      "forcing scans more often will not help if the device reports the same level every time."
+                      "Samples accumulate from scheduled scans and device-triggered battery events — more frequent scans mean faster maturity."
+        }
+
+        section("<b>🔄 What Does Force Scan Actually Do?</b>") {
+            paragraph "The <b>Force Scan Now</b> button on the Summary and Trends pages immediately reads the current " +
+                      "battery level from every monitored device instead of waiting for the next scheduled scan.<br><br>" +
+                      "<b>Force Scan does NOT instantly generate drain samples.</b> A drain sample requires two things:<br>" +
+                      "• The battery level must have <b>changed</b> since the last reading<br>" +
+                      "• Enough <b>time must have passed</b> for a meaningful drain calculation<br><br>" +
+                      "If a device reports the same level it reported last time — even hours later — no new sample is recorded. " +
+                      "Samples can only come from real battery drain over real time.<br><br>" +
+                      "<b>When Force Scan helps:</b> A device that has not reported in several days and the scheduled scan has not caught it yet. " +
+                      "If the level has dropped since the last reading, a sample will be recorded immediately.<br><br>" +
+                      "<b>When Force Scan does not help:</b> A device reporting the same level repeatedly, or a battery that simply " +
+                      "has not drained enough to register a change. The best way to build samples faster is to set the " +
+                      "Scan Interval to Hourly — more frequent reads over time means more opportunities to catch level changes."
         }
 
         section("<b>📊 How Confidence Weighting Works</b>") {

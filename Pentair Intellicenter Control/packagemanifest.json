@@ -1,25 +1,23 @@
 {
-    "packageName": "Pentair IntelliCenter",
-    "author": "jdthomas24",
-    "version": "1.0.0",
-    "releaseNotes": "1.0.0 Initial release. Local TCP/WebSocket integration for Pentair IntelliCenter pool controllers. Auto-discovers circuits, bodies, pumps, sensors, and chlorinator. Supports pool/spa on-off control, temperature readings, pump RPM and watts, salt chlorinator, and heater control.",
-    "category": "Integrations",
-    "description": "Local integration for Pentair IntelliCenter pool controllers. Connects directly to your IntelliCenter over your local network via WebSocket \u2014 no cloud required. Auto-discovers and creates devices for circuits, pool and spa bodies with temperatures and heater control, pump RPM and wattage, air and solar sensors, and salt chlorinator.",
-    "dateReleased": "2026/03/30",
-    "minimumHEVersion": "2.3.0",
-    "apps": [
-        {
-            "name": "Pentair IntelliCenter",
-            "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Parent%20App%20Bridge.groovy",
-            "required": true,
-            "primary": true
-        }
-    ],
-    "drivers": [
-        {
-            "name": "Pentair IntelliCenter Bridge",
-            "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/driver.groovy",
-            "required": true
-        }
-    ]
-}
+  "packageName": "Pentair Intellicenter Controller ",
+  "author": "Jdthomas24",
+  "version": "1.0.0",
+  "category": "Utility",
+  "description": "Pentair Intellicenter Control",
+  "dateReleased": "3/30/26",
+  "minimumHEVersion": "2.3",
+  "apps": [
+    {
+      "name": "Parent App Bridge",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Parent%20App%20Bridge.groovy",
+      "required": true,
+      "oauth": true
+    }
+  ],
+  "drivers": [
+    {
+      "name": "Driver",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/driver.groovy",
+      "required": true
+    }
+  ]

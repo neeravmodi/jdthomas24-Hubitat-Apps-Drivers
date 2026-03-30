@@ -7,7 +7,7 @@ definition(
     importUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
     iconUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Tests%20-%20Groovy%20RAW/Battery%20Monitor%202.0%20BETA%20Tests",
     iconX2Url: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
-    version: "2.4.0 beta 18"
+    version: "2.4.0 beta 19"
 )
 
 def installed() {
@@ -894,8 +894,8 @@ def trendsPage() {
                 def prioA  = trendPriority[trendA] ?: 3
                 def prioB  = trendPriority[trendB] ?: 3
                 if (prioA != prioB) return prioA <=> prioB
-                def levelA = a.currentValue("battery")?.toInteger() ?: 100
-                def levelB = b.currentValue("battery")?.toInteger() ?: 100
+                def levelA = a.currentValue("battery")?.toInteger() != null ? a.currentValue("battery")?.toInteger() : 100
+                def levelB = b.currentValue("battery")?.toInteger() != null ? b.currentValue("battery")?.toInteger() : 100
                 if (levelA != levelB) return levelA <=> levelB
                 return a.displayName.trim() <=> b.displayName.trim()
             }
@@ -906,7 +906,7 @@ def trendsPage() {
 
             devList.each { device ->
                 def hist    = safeHistory(device)
-                def level   = device.currentValue("battery")?.toInteger() ?: 100
+                def level   = device.currentValue("battery")?.toInteger() != null ? device.currentValue("battery")?.toInteger() : 100
                 // FIX #3: Explicit null check on drain — 0 is a valid value
                 def drain   = hist?.drain != null ? hist.drain : 0.3
                 def trend   = state.trend[device.id] ?: "Unknown"
@@ -1227,12 +1227,12 @@ def batteryCatalogPage() {
             "AA":     ["1", "2", "3", "4", "6", "8"],
             "AAA":    ["1", "2", "3", "4", "6", "8"],
             "CR2":    ["1", "2"],
+            "CR123A": ["1", "2"],
             "CR2016": ["1", "2"],
             "CR2032": ["1", "2"],
             "CR2430": ["1", "2"],
             "CR2450": ["1"],
-            "CR123A": ["1", "2"],
-            "18650":  ["1", "2"],
+            "CR2477": ["1", "2"],
             "9V":     ["1"]
         ]
         def rechargeableTypes = [
@@ -1242,6 +1242,7 @@ def batteryCatalogPage() {
             "LIR2032": ["1", "2"],
             "LIR2430": ["1", "2"],
             "LIR2450": ["1"]
+            "18650":  ["1", "2", "3", "4"],
         ]
         def otherTypes = [
             "Other": ["1", "2", "3", "4", "6", "8"]

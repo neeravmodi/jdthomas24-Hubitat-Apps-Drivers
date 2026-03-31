@@ -1,0 +1,23 @@
+{
+  "packageName": "Pentair Intellicenter Controller ",
+  "author": "Jdthomas24",
+  "version": "1.0.0",
+  "category": "Utility",
+  "description": "Pentair Intellicenter Control",
+  "dateReleased": "3/30/26",
+  "minimumHEVersion": "2.3",
+  "apps": [
+    {
+      "name": "Parent App Bridge",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Parent%20App%20Bridge.groovy",
+      "required": true,
+      "oauth": true
+    }
+  ],
+  "drivers": [
+    {
+      "name": "Driver",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/driver.groovy",
+      "required": true
+    }
+  ]

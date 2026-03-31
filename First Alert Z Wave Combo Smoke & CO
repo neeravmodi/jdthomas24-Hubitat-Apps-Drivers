@@ -1,7 +1,7 @@
 /*
- *  Z-Wave First Alert Smoke & CO
+ *  Z-Wave First Alert Smoke & Combo Detector
  *    - Universal Smoke / CO Driver
- *    - Built for First Alert ZCombo and ZCombo-G
+ *    - Built for First Alert ZCombo-G
  *
  *  For Support, Information, and Updates:
  *  https://community.hubitat.com/t/z-wave-universal-smoke-co-detector/127180
@@ -10,10 +10,9 @@
 
 Changelog:
 
-## [1.1.0] - 2026-03-31 (@jdthomas24)
-  - Renamed driver to Z-Wave First Alert Smoke & CO
-  - Added support for older First Alert ZCombo (pre-G) model:0002
-  - Added fingerprint for ZCombo (mfr:0138, prod:0001, deviceId:0002)
+## [1.2.0] - 2026-03-31 (@jdthomas24)
+  - Renamed driver to Z-Wave First Alert Smoke & Combo Detector
+  - Added resetAlarms command to manually force smoke and CO back to clear
 
 ## [1.0.0] - 2023-11-01 (@jtp10181)
   - Initial Release
@@ -37,17 +36,16 @@ Changelog:
 
 import groovy.transform.Field
 
-@Field static final String VERSION = "1.1.0"
+@Field static final String VERSION = "1.2.0"
 @Field static final String DRIVER = "Smoke-CO"
 @Field static final String COMM_LINK = "https://community.hubitat.com/t/z-wave-universal-smoke-co-detector/127180"
 @Field static final Map deviceModelNames = [
-	"0138:0001:0003": "ZCombo-G",   // First Alert ZCombo-G (newer Z-Wave Plus)
-	"0138:0001:0002": "ZCombo"      // First Alert ZCombo (older Z-Wave)
+	"0138:0001:0003": "ZCombo-G"    // First Alert ZCombo-G (Z-Wave Plus)
 ]
 
 metadata {
 	definition (
-		name: "Z-Wave First Alert Smoke & CO",
+		name: "Z-Wave First Alert Smoke & Combo Detector",
 		namespace: "jdthomas24",
 		author: "jdthomas24",
 		importUrl: "https://raw.githubusercontent.com/jtp10181/Hubitat/main/Drivers/generic/zwave-smoke-co-detector.groovy"
@@ -60,6 +58,7 @@ metadata {
 		command "fullConfigure"
 		command "forceRefresh"
 		command "resetWarnings"
+		command "resetAlarms"
 
 		command "setParameter",[[name:"parameterNumber*",type:"NUMBER", description:"Parameter Number"],
 			[name:"value*",type:"NUMBER", description:"Parameter Value"],
@@ -71,11 +70,11 @@ metadata {
 		attribute "syncStatus", "string"
 		attribute "warnings", "number"
 
-		fingerprint mfr:"0138", prod:"0001", deviceId:"0003", inClusters:"0x5E,0x85,0x8E,0x59,0x55,0x86,0x72,0x5A,0x73,0x80,0x9F,0x71,0x84,0x70,0x6C" //First Alert ZCombo-G (newer)
-		fingerprint mfr:"0138", prod:"0001", deviceId:"0002", inClusters:"0x20,0x80,0x70,0x85,0x71,0x72,0x86" //First Alert ZCombo (older)
+		fingerprint mfr:"0138", prod:"0001", deviceId:"0003", inClusters:"0x5E,0x85,0x8E,0x59,0x55,0x86,0x72,0x5A,0x73,0x80,0x9F,0x71,0x84,0x70,0x6C" //First Alert ZCombo-G
 	}
 
 	preferences {
+
 		configParams.each { param ->
 			if (!param.hidden) {
 				Integer paramVal = getParamValue(param)
@@ -241,9 +240,16 @@ String setParameter(paramNum, value, size = null) {
 
 void resetWarnings() {
 	logDebug "reset..."
-
 	device.deleteCurrentState("warnings")
 	sendEventLog(name:"warnings", value:0, desc:"Reset Warnings Counter")
+}
+
+void resetAlarms() {
+	logDebug "resetAlarms..."
+	// Force smoke and CO back to clear — use this to manually recover from a stuck detected state
+	sendEventLog(name:"smoke", value:"clear", desc:"smoke manually reset to clear", isStateChange:true)
+	sendEventLog(name:"carbonMonoxide", value:"clear", desc:"carbonMonoxide manually reset to clear", isStateChange:true)
+	logInfo "Smoke and CO alarms reset to clear"
 }
 
 
@@ -339,6 +345,7 @@ void zwaveEvent(hubitat.zwave.commands.wakeupv2.WakeUpNotification cmd, ep=0) {
 
 void zwaveEvent(hubitat.zwave.commands.notificationv8.NotificationReport cmd, ep=0) {
 	logTrace "${cmd} (ep ${ep})"
+
 	switch (cmd.notificationType) {
 		case 0x01: //Smoke Alarm
 			sendAlarmEvents("smoke", cmd.event as Integer)
@@ -395,6 +402,7 @@ void sendAlarmEvents(String name, Integer event, Integer ep=0) {
 	}
 }
 
+
 void sendSystemEvents(Integer event, Integer ep=0) {
 	switch (event) {
 		case 0x00: break  //Idle State - ignored
@@ -423,7 +431,7 @@ List<String> getConfigureCmds() {
 
 	if (state.resyncAll) {
 		clearVariables()
-		cmds << wakeUpIntervalSetCmd(4200)
+		cmds << wakeUpIntervalSetCmd(4200) //Refuses to change from 4200
 		cmds << wakeUpIntervalGetCmd()
 	}
 
@@ -938,6 +946,7 @@ String setDevModel(BigDecimal firmware) {
 	state.deviceModel = devModel
 	device.updateDataValue("deviceModel", devModel)
 	logDebug "Set Device Info - Model: ${devModel} | Firmware: ${firmware}"
+
 
 	if (devModel == "UNK00") {
 		logWarn "Unsupported Device USE AT YOUR OWN RISK: ${devTypeId}"

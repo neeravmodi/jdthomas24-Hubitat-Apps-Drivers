@@ -7,7 +7,7 @@ definition(
     importUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
     iconUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Tests%20-%20Groovy%20RAW/Battery%20Monitor%202.0%20BETA%20Tests",
     iconX2Url: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
-    version: "2.4.0 beta 21"
+    version: "2.4.0 beta 22"
 )
 
 def installed() {
@@ -90,14 +90,16 @@ def mainPage() {
 
         def hasCustomName = settings?.customAppName?.trim()
         section("<b>App Display Name (optional)</b>", hideable: true, hidden: hasCustomName) {
-            def nameMsg = hasCustomName
-                ? "Current name: <b>${settings.customAppName}</b> — tap section header to change."
-                : "Enter a name to rename this app in your Hubitat app list."
-            paragraph nameMsg
+            paragraph "Enter a name to rename this app in your Hubitat app list."
             input "customAppName", "text",
                   title: "Custom App Name",
                   description: "Rename how this app appears in your Hubitat app list",
                   required: false
+        }
+        if (hasCustomName) {
+            section("") {
+                paragraph "Current name: <b><span style='color:blue;'>${settings.customAppName}</span></b> — tap <b>App Display Name (optional)</b> above to change."
+            }
         }
 
         def devicesSelected = (autoDevices?.size() ?: 0) > 0
@@ -1428,3 +1430,4 @@ def infoPage(Map params = [:]) {
         }
     }
 }
+

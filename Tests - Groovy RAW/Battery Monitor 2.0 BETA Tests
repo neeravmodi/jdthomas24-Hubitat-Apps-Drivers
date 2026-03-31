@@ -2,13 +2,16 @@ definition(
     name: "Battery Monitor 2.0",
     namespace: "jdthomas24",
     author: "Jdthomas24",
-    description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking (v2.4.0b17). Recurring scan schedule, confidence-weighted health, EWMA smoothing.",
+    description: "Advanced Hubitat battery monitoring with analytics, trends and replacement tracking. Recurring scan schedule, confidence-weighted health, EWMA smoothing.",
     category: "Convenience",
     importUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
     iconUrl: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Tests%20-%20Groovy%20RAW/Battery%20Monitor%202.0%20BETA%20Tests",
     iconX2Url: "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Battery%20Monitor%202.0/Raw%20Code/BatteryMonitor2.0.groovy",
-    version: "2.4.0 beta 22"
+    version: appVersion()
 )
+
+// FIX #1 Version in one place
+def appVersion() { return "2.4.0 beta 23" }
 
 def installed() {
     log.debug "Installed - initializing app"
@@ -103,7 +106,7 @@ def mainPage() {
         }
 
         def devicesSelected = (autoDevices?.size() ?: 0) > 0
-        section("<b>Auto Battery Discovery</b>", hideable: true, hidden: devicesSelected) {
+        section("<b>Selected Monitored Devices</b>", hideable: true, hidden: devicesSelected) {
             paragraph "<b>⚠ Important: The app automatically detects all devices reporting battery levels. " +
                       "Select the devices you want to monitor from the list below. Only selected devices will be tracked for trends, battery health, and notifications.</b>"
             paragraph "<span style='color:red; font-weight:bold;'>Note for mobile users:</span> If your device names are long, they may extend past the screen in the selection list. This is a UI limitation on smaller screens. You can still select devices as usual."
@@ -116,7 +119,7 @@ def mainPage() {
         }
         if (devicesSelected) {
             section("") {
-                paragraph "<b><span style='color:blue;'>${autoDevices.size()} device(s)</span> selected.</b> Tap <b>Auto Battery Discovery</b> above to expand and change your selection."
+                paragraph "<b><span style='color:blue;'>${autoDevices.size()} device(s)</span> selected.</b> Tap <b>Selected Monitored Devices</b> above to expand and change your selection."
             }
 
             // FIX #8: Use local devList instead of reassigning autoDevices
@@ -149,7 +152,8 @@ def mainPage() {
                   submitOnChange: true
         }
 
-        section("<b>Notifications</b>") {
+        def notificationSettings = (notificationSettings != false)
+        section("<b>Notifications</b>", hideable: true, hidden: notificationSettings) {
             // NOTE: toggling this on reveals notification settings below
             paragraph "ℹ️ Enable the toggle below to reveal notification settings including frequency, timing, device targets, and which battery groups to include in reports."
             input "enablePush", "bool", title: "Enable notifications", defaultValue: true, submitOnChange: true
@@ -171,14 +175,15 @@ def mainPage() {
 
                 input "notifyDevices", "capability.notification", title: "Notification devices", multiple: true, required: false
 
-                input "enablePushover", "bool", title: "⚙️ Enable Pushover markup", defaultValue: false, submitOnChange: true
-                if (settings?.enablePushover == true) {
-                    input "pushoverPrefix", "text",
-                          title: "Pushover tags",
-                          description: "Pushover-specific additions to the Battery Monitor notifications, e.g. [H][TITLE=Battery Report][HTML][SELFDESTRUCT=43200]",
-                          required: false
-                }
-
+                input "enablePushover", "bool", title: "⚙️ Enable Pushover Markup", defaultValue: false
+                input "pushoverDevices", "capability.notification",
+                      title: "Pushover notification devices <b>(receives Pushover-formatted message)</b>",
+                      multiple: true, required: false
+                input "pushoverPrefix", "text",
+                      title: "Pushover tags <b>(Only used if Enable Pushover Markup is toggled ON)</b>",
+                      description: "Pushover-specific additions to the Battery Monitor notifications, e.g. [H][TITLE=Battery Report][HTML][SELFDESTRUCT=43200]",
+                            required: false
+            
                 paragraph "<b>Report Sections (choose which battery groups to include in notifications):</b>"
                 input "notifyPoor",      "bool", title: "🔴 Include Poor (≤25%)",                              defaultValue: true
                 input "notifyFair",      "bool", title: "🟠 Include Fair (26–70%)",                            defaultValue: true
@@ -196,10 +201,15 @@ def mainPage() {
                 href "sendNotificationPage", title: "📤 Send Notification Now", description: "Tap to preview and send a battery summary notification"
             }
         }
-
+        if (notificationSettings) {
+            section("") {
+                paragraph "Notifications are <b><span style='color:blue;'>" + (settings?.enablePush != false ? "ON" : "OFF") + "</span></b> Tap <b>Notifications</b> above to expand and configure notifications."
+            }
+        }
+        
         section("<b>Reports:</b>") {
             href "summaryPage",           title: "Battery Summary"
-            href "trendsPage",            title: "Battery Trends"
+            href "trendsPage",            title: "Battery Trends" 
             href "historyPage",           title: "Battery Replacement History"
             href "manualReplacementPage", title: "Manual Battery Replacement"
             href "batteryCatalogPage",    title: "🔋 Battery Catalog"
@@ -320,9 +330,24 @@ def scheduledSummary() {
         [name: device.displayName.trim(), level: lvl, health: health(device), drain: displayDrain(device)]
     }.sort { a, b -> a.level != b.level ? a.level <=> b.level : a.name <=> b.name }
 
-    def prefix   = (enablePushover && pushoverPrefix?.trim()) ? "${pushoverPrefix.trim()}\n" : ""
-    def body     = "🔋 Battery Summary\n"  // plain message body — no Pushover tags
-    def msg      = "${prefix}${body}"        // Pushover version — prefix + body
+    def usePushover  = (settings?.enablePushover == true && settings?.pushoverPrefix?.trim())
+    def useHtmlLink  = (usePushover && settings?.pushoverPrefix?.contains('[HTML]'))
+
+    def prefix  = ""
+    def postfix = ""
+
+    if (usePushover) {
+        def tags = settings.pushoverPrefix.trim()
+        def priorityMatch = tags =~ /^(\[[EHLNS]\])(.*)/
+        if (priorityMatch) {
+            prefix  = priorityMatch[0][1]         // e.g. [H]
+            postfix = priorityMatch[0][2].trim()  // everything else e.g. [HTML][TITLE=...][SELFDESTRUCT=43200]
+        } else {
+            postfix = tags
+        }
+    }
+
+    def body = "${prefix}🔋 Battery Summary\n"
 
     def staleDevices = devList.findAll { isStale(it) }.collect {
         def last  = getLastActivityTime(it)
@@ -380,22 +405,22 @@ def scheduledSummary() {
         if (!hasContent) return
     }
 
-    if (notifyIncludeAppLink != null ? notifyIncludeAppLink : false) {
-        def hubIp = location.hub.localIP
-        // Pushover version — use HTML link if [HTML] tag is in the prefix
-        def pushoverLink = (enablePushover && prefix.contains("[HTML]")) ?
-            "\n🔗 <a href='http://${hubIp}/installedapp/configure/${app.id}/mainPage'>Battery Monitor</a>" :
-            "\n🔗 Battery Monitor: http://${hubIp}/installedapp/configure/${app.id}/mainPage"
-        // Plain version — always plain text link
-        def plainLink = "\n🔗 Battery Monitor: http://${hubIp}/installedapp/configure/${app.id}/mainPage"
-        body += plainLink
-        msg   = "${prefix}${body.replace(plainLink, pushoverLink)}"
-    } else {
-        msg = "${prefix}${body}"
-    }
+def pushoverBody = body
+def plainBody    = body
 
-    if (enablePush)    sendPush(msg)                                        // Pushover-tagged version
-    if (notifyDevices) notifyDevices.each { it.deviceNotification(body) }  // clean plain-text version
+if (notifyIncludeAppLink != null ? notifyIncludeAppLink : false) {
+    def hubIp     = location.hub.localIP
+    def htmlLink  = "\n🔗 <a href='http://${hubIp}/installedapp/configure/${app.id}/mainPage'>Battery Monitor</a>"
+    def plainLink = "\n🔗 Battery Monitor: http://${hubIp}/installedapp/configure/${app.id}/mainPage"
+    pushoverBody += htmlLink
+    plainBody    += plainLink
+}
+
+    if (postfix) pushoverBody += "${postfix}\n"
+
+    if (settings?.enablePush)       sendPush(pushoverBody)
+    if (settings?.pushoverDevices)  settings.pushoverDevices.each { it.deviceNotification(pushoverBody) }
+    if (settings?.notifyDevices)    notifyDevices.each { it.deviceNotification(plainBody) }
 }
 
 // ============================================================
@@ -403,7 +428,12 @@ def scheduledSummary() {
 // ============================================================
 def batteryHandler(evt) {
     def device = evt.device
-    def level  = evt.value?.toInteger()
+    def level  = null
+    try {
+        level = evt.value ? (int) Double.parseDouble(evt.value) : null
+    } catch (e) {
+        log.warn "batteryHandler: Could not parse battery level '${evt.value}' for ${device?.displayName}: ${e.message}"
+    }
     if (device && level != null) {
         updateBattery(device, level)
     }
@@ -851,7 +881,7 @@ def summaryPage() {
                 }
 
                 def name = device.displayName ?: "Unknown Device"
-                def summaryRowBg = (summaryRowNum % 2 == 0) ? "#ffffff" : "#f9f9f9"
+                def summaryRowBg = (summaryRowNum % 2 == 0) ? "#ffffff" : "#ebebeb"
                 summaryRowNum++
                 table += "<tr style='background-color:${summaryRowBg};'>"
 
@@ -902,8 +932,8 @@ def trendsPage() {
                 def prioA  = trendPriority[trendA] ?: 3
                 def prioB  = trendPriority[trendB] ?: 3
                 if (prioA != prioB) return prioA <=> prioB
-                def levelA = a.currentValue("battery")?.toInteger() ?: 100
-                def levelB = b.currentValue("battery")?.toInteger() ?: 100
+                def levelA = a.currentValue("battery")?.toInteger() ? a.currentValue("battery")?.toInteger() : 100
+                def levelB = b.currentValue("battery")?.toInteger() ? b.currentValue("battery")?.toInteger() : 100
                 if (levelA != levelB) return levelA <=> levelB
                 return a.displayName.trim() <=> b.displayName.trim()
             }
@@ -914,7 +944,7 @@ def trendsPage() {
 
             devList.each { device ->
                 def hist    = safeHistory(device)
-                def level   = device.currentValue("battery")?.toInteger() ?: 100
+                def level   = device.currentValue("battery")?.toInteger() ? device.currentValue("battery")?.toInteger() : 100
                 // FIX #3: Explicit null check on drain — 0 is a valid value
                 def drain   = hist?.drain != null ? hist.drain : 0.3
                 def trend   = state.trend[device.id] ?: "Unknown"
@@ -927,7 +957,7 @@ def trendsPage() {
                 def confPct    = Math.round(conf * 100)
                 def confLabel  = h == "Pending" ? "⏳ ${samples}/5 samples" : "${confPct}%"
 
-                def trendsRowBg = (trendsRowNum % 2 == 0) ? "#ffffff" : "#f9f9f9"
+                def trendsRowBg = (trendsRowNum % 2 == 0) ? "#ffffff" : "#ebebeb"
                 trendsRowNum++
                 table += "<tr style='background-color:${trendsRowBg};'>"  
                 table += "<td style='padding:4px; border:1px solid #ccc;'>${device.displayName}</td>"
@@ -961,24 +991,30 @@ def historyPage() {
                 return
             }
 
-            def table = "<table style='width:100%; border-collapse: collapse;'>"
-            table += "<tr style='font-weight:bold;'><td>Device</td><td>Battery Type</td><td>Level</td><td>Date</td><td>Type?</td></tr>"
+            def table = "<table style='width:100%; border-collapse: collapse; border: 1px solid #ccc;'>"
+            table += "<tr style='font-weight:bold; background-color:#f0f0f0;'>"
+            table += "<td style='padding:4px; border:1px solid #ccc;'>Device</td>"
+            table += "<td style='padding:4px; border:1px solid #ccc;'>Battery Type</td>"
+            table += "<td style='padding:4px; border:1px solid #ccc;'>Level</td>"
+            table += "<td style='padding:4px; border:1px solid #ccc;'>Date</td>"
+            table += "<td style='padding:4px; border:1px solid #ccc;'>Type?</td>"
+            table += "</tr>"
 
-            state.replacements.sort { a, b -> b.date <=> a.date }.each { r ->
+            state.replacements.sort { a, b -> b.date <=> a.date }.eachWithIndex { r, idx ->
+                def historyRowBg = (idx % 2 == 0) ? "#ffffff" : "#ebebeb"
                 def typeTag = r.type == "manual" ? "<span style='color:blue;'>M</span>" :
                               r.type == "auto"   ? "<span style='color:green;'>A</span>" : "?"
                 def dev     = autoDevices?.find { it.displayName == r.device }
                 def info    = dev ? getCatalogBatteryInfo(dev) : null
                 def infoStr = info ? "${info}" : ""
 
-                table += "<tr>"
-                table += "<td>${r.device}</td>"
-                table += "<td>${infoStr}</td>"
-                table += "<td>${r.level}%</td>"
-                table += "<td>${r.date}</td>"
-                table += "<td>${typeTag}</td>"
-                table += "</tr>"
-            }
+                table += "<tr style='background-color:${historyRowBg};'>"
+                table += "<td style='padding:4px; border:1px solid #ccc;'>${r.device}</td>"
+                table += "<td style='padding:4px; border:1px solid #ccc;'>${infoStr}</td>"
+                table += "<td style='padding:4px; border:1px solid #ccc;'>${r.level}%</td>"
+                table += "<td style='padding:4px; border:1px solid #ccc;'>${r.date}</td>"
+                table += "<td style='padding:4px; border:1px solid #ccc;'>${typeTag}</td>"
+                table += "</tr>"            }
 
             table += "</table>"
             paragraph table
@@ -1181,7 +1217,16 @@ def sendNotificationPage() {
             section("<b>Result</b>") {
                 scheduledSummary()
                 app.updateSetting("sendNowConfirm", [value: false, type: "bool"])
-                paragraph "✅ Notification sent to all configured devices."
+
+                def sentTo = []
+                if (settings?.notifyDevices)   sentTo.addAll(settings.notifyDevices.collect { it.displayName })		
+                if (settings?.pushoverDevices) sentTo.addAll(settings.pushoverDevices.collect { "${it.displayName} (Pushover)" })
+
+                if (sentTo) {
+                    paragraph "✅ Notification sent to:\n" + sentTo.collect { "• ${it}" }.join("\n")
+                } else {
+                    paragraph "⚠️ Notification was not sent — no notification devices are configured and push is disabled."
+				}
             }
         }
     }
@@ -1240,7 +1285,6 @@ def batteryCatalogPage() {
             "CR2430": ["1", "2"],
             "CR2450": ["1"],
             "CR123A": ["1", "2"],
-            "18650":  ["1", "2"],
             "9V":     ["1"]
         ]
         def rechargeableTypes = [
@@ -1249,7 +1293,8 @@ def batteryCatalogPage() {
             "LIR2016": ["1", "2"],
             "LIR2032": ["1", "2"],
             "LIR2430": ["1", "2"],
-            "LIR2450": ["1"]
+            "LIR2450": ["1"],
+            "18650":  ["1", "2","3","4"]
         ]
         def otherTypes = [
             "Other": ["1", "2", "3", "4", "6", "8"]
@@ -1430,4 +1475,3 @@ def infoPage(Map params = [:]) {
         }
     }
 }
-

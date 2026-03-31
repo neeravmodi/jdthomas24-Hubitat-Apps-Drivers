@@ -23,7 +23,6 @@ def updated() {
     unsubscribe()
     initialize()
 
-    // FIX #8: Use local devList instead of reassigning autoDevices
     def devList = autoDevices ?: []
     def currentIds = devList.collect { it.id as String }
     state.history?.keySet()?.findAll { !currentIds.contains(it) }?.each { removedId ->
@@ -106,10 +105,14 @@ def mainPage() {
             paragraph "<span style='color:red; font-weight:bold;'>Note for mobile users:</span> If your device names are long, they may extend past the screen in the selection list. This is a UI limitation on smaller screens. You can still select devices as usual."
             paragraph "<span style='color:red; font-weight:bold;'>IMPORTANT: After selecting devices, you MUST click 'Done' to exit the app BEFORE viewing the battery report. Skipping this step may cause an error.</span>"
 
+            // FIX: Changed required from true to false.
+            // With required: true, if no devices are selected the app blocks Done entirely,
+            // leaving the user with no option except to delete the app. required: false
+            // allows saving with an empty selection while the app handles that state gracefully.
             input "autoDevices", "capability.battery",
                   title: "Select battery devices to monitor",
                   multiple: true,
-                  required: true
+                  required: false
         }
         if (devicesSelected) {
             section("") {
@@ -1169,6 +1172,39 @@ def sendNotificationPage() {
         section("") {
             paragraph rawHtml: true, "<script>focusOnFirstEmptyTextInput = function() {}; window.scrollTo(0,0); document.addEventListener('DOMContentLoaded', function() { window.scrollTo(0,0); });</script>"
         }
+
+        // FIX: Check for missing devices and missing notification targets before
+        // allowing send. Previously the page reported success even when nothing
+        // was sent because scheduledSummary() exits silently on empty devList,
+        // and the sent-to check was independent of the actual send outcome.
+        def devList      = autoDevices ?: []
+        def hasDevices   = devList.size() > 0
+        def hasTargets   = (settings?.notifyDevices?.size() ?: 0) > 0 ||
+                           (settings?.pushoverDevices?.size() ?: 0) > 0 ||
+                           (settings?.enablePush == true)
+        def notifyOn     = settings?.enablePush != false
+
+        if (!hasDevices) {
+            section("<b>Cannot Send</b>") {
+                paragraph "⚠️ No monitored devices are selected. Please go back to the main page, select devices, and tap Done before sending a notification."
+            }
+            return
+        }
+
+        if (!notifyOn) {
+            section("<b>Cannot Send</b>") {
+                paragraph "⚠️ Notifications are turned off. Enable the Notifications toggle on the main page before sending."
+            }
+            return
+        }
+
+        if (!hasTargets) {
+            section("<b>Cannot Send</b>") {
+                paragraph "⚠️ No notification devices are configured. Add at least one notification device on the main page before sending."
+            }
+            return
+        }
+
         section("<b>Confirm</b>") {
             paragraph "This will send a battery summary notification to all configured notification devices right now."
             input "sendNowConfirm", "bool",
@@ -1188,7 +1224,7 @@ def sendNotificationPage() {
                 if (sentTo) {
                     paragraph "✅ Notification sent to:\n" + sentTo.collect { "• ${it}" }.join("\n")
                 } else {
-                    paragraph "⚠️ Notification was not sent — no notification devices are configured and push is disabled."
+                    paragraph "✅ Notification sent via hub push."
                 }
             }
         }
@@ -1427,3 +1463,4 @@ def infoPage(Map params = [:]) {
         }
     }
 }
+

@@ -33,7 +33,7 @@ def mainPage() {
             input "debugMode",
                   "bool",
                   title: "Enable Debug Logging",
-                  defaultValue: true
+                  defaultValue: false
             label title: "App Name", required: false
         }
 
@@ -163,6 +163,57 @@ def uninstalled() {
     getChildDevices().each {
         try { deleteChildDevice(it.deviceNetworkId) } catch (e) { }
     }
+}
+
+// ============================================================
+// ===================== BODY DEVICE MANAGEMENT ==============
+// ============================================================
+// Body devices are created directly under the app (not the bridge)
+// to avoid Hubitat's grandchild device limitation.
+
+def getOrCreateBodyDevice(String dni, String label, String endpointBase) {
+    def child = getChildDevice(dni)
+    if (!child) {
+        try {
+            log.info "Creating body device: ${label} (${dni})"
+            child = addChildDevice("intellicenter", "Pentair IntelliCenter Body", dni,
+                [label: label, isComponent: false])
+        } catch (e) {
+            log.warn "Could not create body device ${label}: ${e.message}"
+            return null
+        }
+    }
+    // Always update endpoint base in case app ID or hub IP changed
+    if (endpointBase) {
+        child.updateSetting("endpointBase", [value: endpointBase, type: "text"])
+    }
+    return child
+}
+
+// ============================================================
+// ===================== BODY COMMAND RELAY ==================
+// ============================================================
+// Body devices call these methods on their parent (the app).
+// The app relays them to the bridge which sends to IntelliCenter.
+
+def setBodyStatus(String bodyDni, String status) {
+    def bridge = getChildDevice("intellicenter-bridge-${app.id}")
+    bridge?.setBodyStatus(bodyDni, status)
+}
+
+def setBodySetPoint(String bodyDni, Integer temp) {
+    def bridge = getChildDevice("intellicenter-bridge-${app.id}")
+    bridge?.setBodySetPoint(bodyDni, temp)
+}
+
+def setBodyHeatSource(String bodyDni, String source) {
+    def bridge = getChildDevice("intellicenter-bridge-${app.id}")
+    bridge?.setBodyHeatSource(bodyDni, source)
+}
+
+def componentRefresh(child) {
+    def bridge = getChildDevice("intellicenter-bridge-${app.id}")
+    bridge?.refreshBody(child.deviceNetworkId)
 }
 
 // ============================================================

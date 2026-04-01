@@ -305,50 +305,34 @@ def processCircuit(String objnam, Map params) {
 }
 
 def processBody(String objnam, Map params) {
-    // Always resolve subtype from stored map so partial NotifyList updates work correctly
+    // Always resolve subtype/label from stored map so partial NotifyList updates work correctly
     def subtyp = params.SUBTYP ?: state.objectMap?.get(objnam)?.SUBTYP ?: ""
     def label  = params.SNAME  ?: state.objectMap?.get(objnam)?.SNAME  ?: objnam
     def status = params.STATUS
     def temp   = params.TEMP
-    def hitmp  = params.HITMP
     def lotmp  = params.LOTMP
+    def hitmp  = params.HITMP
     def htmode = params.HTMODE
+    def htsrc  = params.HTSRC
 
-    // Body on/off switch
+    // Single combined body controller device
+    def dni  = "intellicenter-body-${objnam}"
+    def body = getOrCreateChild("Pentair IntelliCenter Body", dni, label)
+    if (!body) return
+
     if (status != null) {
-        def swDni = "intellicenter-body-${objnam}"
-        def sw    = getOrCreateChild("Generic Component Switch", swDni, label)
-        sw?.sendEvent(name: "switch", value: (status == "ON" ? "on" : "off"))
+        body.sendEvent(name: "switch",      value: (status == "ON" ? "on" : "off"))
+        body.sendEvent(name: "bodyStatus",  value: (status == "ON" ? "On" : "Off"))
+        // Clear any pending confirmation if status arrived from controller
+        if (status == "ON") body.sendEvent(name: "pendingOn", value: "false")
     }
+    if (temp   != null) body.sendEvent(name: "temperature",     value: temp.toInteger(),  unit: "°F")
+    if (lotmp  != null) body.sendEvent(name: "heatingSetpoint", value: lotmp.toInteger(), unit: "°F")
+    if (hitmp  != null) body.sendEvent(name: "maxSetTemp",      value: hitmp.toInteger(), unit: "°F")
+    if (htmode != null) body.sendEvent(name: "heaterMode",      value: htmode)
+    if (htsrc  != null) body.sendEvent(name: "heatSource",      value: htsrc)
 
-    // Current temperature
-    if (temp != null) {
-        def tDni = "intellicenter-bodytemp-${objnam}"
-        def tc   = getOrCreateChild("Generic Component Temperature Sensor", tDni, "${label} Temp")
-        tc?.sendEvent(name: "temperature", value: temp.toInteger(), unit: "°F")
-    }
-
-    // Set point — LOTMP is the active set point for both POOL and SPA bodies
-    // HITMP is the upper temperature limit, not the set point
-    def setpt = params.LOTMP
-    if (setpt != null) {
-        def spDni = "intellicenter-setpt-${objnam}"
-        // Use custom set point driver so user can change the value
-        def spc   = getOrCreateChild("Pentair IntelliCenter Set Point", spDni, "${label} Set Point")
-        spc?.sendEvent(name: "heatingSetpoint", value: setpt.toInteger(), unit: "°F")
-    }
-
-    // Heater mode
-    if (htmode != null) {
-        def htDni = "intellicenter-heater-${objnam}"
-        def htc   = getOrCreateChild("Generic Component Switch", htDni, "${label} Heater")
-        if (htc) {
-            htc.sendEvent(name: "switch",      value: (htmode == "OFF" ? "off" : "on"))
-            htc.sendEvent(name: "heaterMode",  value: htmode)
-        }
-    }
-
-    if (debugMode) log.debug "Body [${label}] (${subtyp}): status=${status} temp=${temp} setpt=${setpt} htmode=${htmode}"
+    if (debugMode) log.debug "Body [${label}] (${subtyp}): status=${status} temp=${temp} setpt=${lotmp} maxTemp=${hitmp} htmode=${htmode} htsrc=${htsrc}"
 }
 
 def processPump(String objnam, Map params) {
@@ -401,19 +385,38 @@ def processChem(String objnam, Map params) {
 }
 
 // ============================================================
-// ===================== SET POINT COMMAND ===================
+// ===================== BODY COMMANDS =======================
 // ============================================================
-// Called by the Pentair IntelliCenter Set Point child driver
+// Called by the Pentair IntelliCenter Body child driver
+
+def setBodyStatus(String childDni, String status) {
+    def objnam = objnamFromDni(childDni)
+    if (!objnam) { log.warn "setBodyStatus: no objnam for DNI ${childDni}"; return }
+    if (debugMode) log.debug "setBodyStatus: ${objnam} STATUS=${status}"
+    sendCommand([
+        command: "SetParamList",
+        objectList: [[objnam: objnam, params: [STATUS: status]]]
+    ])
+}
+
 def setBodySetPoint(String childDni, Integer temp) {
     def objnam = objnamFromDni(childDni)
     if (!objnam) { log.warn "setBodySetPoint: no objnam for DNI ${childDni}"; return }
-
     // LOTMP is the active set point for both POOL and SPA bodies
     if (debugMode) log.debug "setBodySetPoint: ${objnam} LOTMP=${temp}"
-
     sendCommand([
         command: "SetParamList",
         objectList: [[objnam: objnam, params: [LOTMP: temp.toString()]]]
+    ])
+}
+
+def setBodyHeatSource(String childDni, String source) {
+    def objnam = objnamFromDni(childDni)
+    if (!objnam) { log.warn "setBodyHeatSource: no objnam for DNI ${childDni}"; return }
+    if (debugMode) log.debug "setBodyHeatSource: ${objnam} HTSRC=${source}"
+    sendCommand([
+        command: "SetParamList",
+        objectList: [[objnam: objnam, params: [HTSRC: source]]]
     ])
 }
 

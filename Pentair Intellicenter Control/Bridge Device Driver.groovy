@@ -335,8 +335,7 @@ def processBody(String objnam, Map params) {
         def spDni = "intellicenter-setpt-${objnam}"
         // Use custom set point driver so user can change the value
         def spc   = getOrCreateChild("Pentair IntelliCenter Set Point", spDni, "${label} Set Point")
-        spc?.sendEvent(name: "temperature",      value: setpt.toInteger(), unit: "°F")
-        spc?.sendEvent(name: "heatingSetpoint",  value: setpt.toInteger(), unit: "°F")
+        spc?.sendEvent(name: "heatingSetpoint", value: setpt.toInteger(), unit: "°F")
     }
 
     // Heater mode
@@ -512,3 +511,4 @@ def getOrCreateChild(String driver, String dni, String label) {
     }
     return child
 }
+

@@ -41,12 +41,12 @@ metadata {
 def installed() {
     log.info "IntelliCenter Body installed: ${device.displayName}"
     sendEvent(name: "pendingOn", value: "false")
-    renderTile()
+    debounceTile()
 }
 
 def updated() {
     log.info "IntelliCenter Body updated: ${device.displayName}"
-    renderTile()
+    debounceTile()
 }
 
 // ============================================================
@@ -61,7 +61,7 @@ def on() {
     if (debugMode) log.debug "on() — pending confirmation (${timeout}s)"
     sendEvent(name: "pendingOn", value: "true")
     runIn(timeout, cancelOn)
-    renderTile()
+    debounceTile()
 }
 
 def confirmOn() {
@@ -75,14 +75,14 @@ def confirmOn() {
     sendEvent(name: "bodyStatus", value: "On")
     if (debugMode) log.debug "confirmOn() — sending ON to controller"
     parent?.setBodyStatus(device.deviceNetworkId, "ON")
-    renderTile()
+    debounceTile()
 }
 
 def cancelOn() {
     if (debugMode) log.debug "cancelOn() — confirmation timed out"
     sendEvent(name: "pendingOn", value: "false")
     log.info "${device.displayName} turn-on cancelled (timed out)"
-    renderTile()
+    debounceTile()
 }
 
 def off() {
@@ -92,7 +92,7 @@ def off() {
     sendEvent(name: "bodyStatus", value: "Off")
     if (debugMode) log.debug "off() — sending OFF to controller"
     parent?.setBodyStatus(device.deviceNetworkId, "OFF")
-    renderTile()
+    debounceTile()
 }
 
 // ============================================================
@@ -109,7 +109,7 @@ def setHeatingSetpoint(temperature) {
     if (debugMode) log.debug "setHeatingSetpoint: ${temp}°F"
     sendEvent(name: "heatingSetpoint", value: temp, unit: "°F")
     parent?.setBodySetPoint(device.deviceNetworkId, temp)
-    renderTile()
+    debounceTile()
 }
 
 def adjustSetPointUp() {
@@ -129,7 +129,7 @@ def setHeatSource(source) {
     if (debugMode) log.debug "setHeatSource: ${source}"
     sendEvent(name: "heatSource", value: source)
     parent?.setBodyHeatSource(device.deviceNetworkId, source)
-    renderTile()
+    debounceTile()
 }
 
 // ============================================================
@@ -137,6 +137,16 @@ def setHeatSource(source) {
 // ============================================================
 def refresh() {
     parent?.componentRefresh(this)
+}
+
+// ============================================================
+// ===================== TILE DEBOUNCE =======================
+// ============================================================
+// Collapses rapid successive updates into a single render
+// to avoid excessive CPU load from frequent controller updates.
+def debounceTile() {
+    unschedule(renderTile)
+    runIn(3, renderTile)
 }
 
 // ============================================================
@@ -285,3 +295,4 @@ def renderTile() {
 
     sendEvent(name: "tile", value: html, displayed: false)
 }
+

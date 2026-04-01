@@ -2,7 +2,7 @@ metadata {
     definition(
         name: "Pentair IntelliCenter Pump",
         namespace: "intellicenter",
-        author: "Custom Integration",
+        author: "jdthomas24",
         description: "Pump child device for Pentair IntelliCenter — shows RPM/Watts and allows speed control"
     ) {
         attribute "rpm",   "number"

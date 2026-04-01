@@ -316,27 +316,34 @@ def processBody(String objnam, Map params) {
     def htmode = params.HTMODE
     def htsrc  = params.HTSRC
 
-    // Single combined body controller device
+    // Single combined body controller device — created via parent app
+    // to avoid grandchild limitation in Hubitat
     def dni  = "intellicenter-body-${objnam}"
-    def body = getOrCreateChild("Pentair IntelliCenter Body", dni, label)
+    def body = parent?.getOrCreateBodyDevice(dni, label, endpointBase ?: "")
     if (!body) return
-
-    // Pass endpoint base URL so the tile can make local HTTP calls without a token
-    if (endpointBase) {
-        body.updateSetting("endpointBase", [value: endpointBase, type: "text"])
-    }
 
     if (status != null) {
         body.sendEvent(name: "switch",      value: (status == "ON" ? "on" : "off"))
         body.sendEvent(name: "bodyStatus",  value: (status == "ON" ? "On" : "Off"))
-        // Clear any pending confirmation if status arrived from controller
         if (status == "ON") body.sendEvent(name: "pendingOn", value: "false")
     }
-    if (temp   != null) body.sendEvent(name: "temperature",     value: temp.toInteger(),  unit: "°F")
-    if (lotmp  != null) body.sendEvent(name: "heatingSetpoint", value: lotmp.toInteger(), unit: "°F")
-    if (hitmp  != null) body.sendEvent(name: "maxSetTemp",      value: hitmp.toInteger(), unit: "°F")
-    if (htmode != null) body.sendEvent(name: "heaterMode",      value: htmode)
-    if (htsrc  != null) body.sendEvent(name: "heatSource",      value: htsrc)
+    if (temp  != null) body.sendEvent(name: "temperature",     value: temp.toInteger(),  unit: "°F")
+    if (lotmp != null) body.sendEvent(name: "heatingSetpoint", value: lotmp.toInteger(), unit: "°F")
+    if (hitmp != null) body.sendEvent(name: "maxSetTemp",      value: hitmp.toInteger(), unit: "°F")
+
+    // Map HTMODE numeric code to readable string
+    if (htmode != null) {
+        def modeMap = ["0":"Off", "1":"Heater", "2":"Solar Only", "3":"Solar Preferred",
+                       "4":"Heat Pump", "5":"Heat Pump Preferred", "OFF":"Off"]
+        body.sendEvent(name: "heaterMode", value: modeMap[htmode.toString()] ?: htmode)
+    }
+
+    // Map HTSRC object ID to readable string
+    if (htsrc != null) {
+        def srcMap = ["00000":"Off", "H0001":"Heater", "S0001":"Solar Only",
+                      "H0002":"Solar Preferred", "H0003":"Heat Pump", "H0004":"Heat Pump Preferred"]
+        body.sendEvent(name: "heatSource", value: srcMap[htsrc] ?: htsrc)
+    }
 
     if (debugMode) log.debug "Body [${label}] (${subtyp}): status=${status} temp=${temp} setpt=${lotmp} maxTemp=${hitmp} htmode=${htmode} htsrc=${htsrc}"
 }
@@ -507,7 +514,17 @@ def componentRefresh(child) {
     if (!objnam) return
     sendCommand([
         command: "GetParamList",
-        objectList: [[objnam: objnam, keys: ["STATUS", "TEMP", "RPM", "WATTS", "GPM", "SALT", "SOURCE", "LOTMP", "HITMP"]]]
+        objectList: [[objnam: objnam, keys: ["STATUS", "TEMP", "RPM", "WATTS", "GPM", "SALT", "SOURCE", "LOTMP", "HITMP", "HTMODE", "HTSRC"]]]
+    ])
+}
+
+// Body device refresh called from app-owned body devices
+def refreshBody(String dni) {
+    def objnam = objnamFromDni(dni)
+    if (!objnam) return
+    sendCommand([
+        command: "GetParamList",
+        objectList: [[objnam: objnam, keys: ["STATUS", "TEMP", "LOTMP", "HITMP", "HTMODE", "HTSRC"]]]
     ])
 }
 

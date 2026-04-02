@@ -7,15 +7,15 @@ metadata {
     ) {
         capability "Initialize"
         capability "Refresh"
- 
+
         attribute "connectionStatus", "string"
- 
+
         command "connect"
         command "disconnect"
         command "circuitOn",  [[name: "DNI*", type: "STRING", description: "Child device DNI"]]
         command "circuitOff", [[name: "DNI*", type: "STRING", description: "Child device DNI"]]
     }
- 
+
     preferences {
         input "ipAddress",    "text",   title: "IntelliCenter IP",  required: true
         input "portNumber",   "number", title: "Port",              defaultValue: 6680
@@ -23,7 +23,7 @@ metadata {
         input "endpointBase", "text",   title: "App Endpoint Base", required: false
     }
 }
- 
+
 // ============================================================
 // ===================== LIFECYCLE ===========================
 // ============================================================
@@ -31,25 +31,25 @@ def installed() {
     log.info "IntelliCenter Bridge installed"
     initialize()
 }
- 
+
 def updated() {
     log.info "IntelliCenter Bridge updated"
     initialize()
 }
- 
+
 def initialize() {
     state.msgBuffer   = ""
     state.objectMap   = [:]
     state.pendingCmds = [:]
     state.connected   = false
- 
+
     unschedule()
     // Watchdog every 2 minutes — reconnects if WebSocket has dropped
     schedule("0 0/2 * * * ?", reconnectIfNeeded)
- 
+
     connect()
 }
- 
+
 def refresh() {
     if (state.connected) {
         requestEquipment()
@@ -57,7 +57,7 @@ def refresh() {
         connect()
     }
 }
- 
+
 // ============================================================
 // ===================== CONNECTION ==========================
 // ============================================================
@@ -67,7 +67,7 @@ def connect() {
         sendEvent(name: "connectionStatus", value: "Not Configured")
         return
     }
- 
+
     try {
         def uri = "ws://${ipAddress}:${portNumber ?: 6680}"
         if (debugMode) log.debug "Connecting via WebSocket to ${uri}"
@@ -78,14 +78,14 @@ def connect() {
         sendEvent(name: "connectionStatus", value: "Disconnected")
     }
 }
- 
+
 def disconnect() {
     try { interfaces.webSocket.close() } catch (e) { }
     state.connected = false
     sendEvent(name: "connectionStatus", value: "Disconnected")
     log.info "IntelliCenter disconnected"
 }
- 
+
 def webSocketStatus(String message) {
     if (debugMode) log.debug "WebSocket status: ${message}"
     if (message.contains("open")) {
@@ -100,14 +100,14 @@ def webSocketStatus(String message) {
         sendEvent(name: "connectionStatus", value: "Disconnected")
     }
 }
- 
+
 def reconnectIfNeeded() {
     if (!state.connected) {
         log.info "Watchdog: reconnecting to IntelliCenter"
         connect()
     }
 }
- 
+
 // ============================================================
 // ===================== INCOMING DATA =======================
 // ============================================================
@@ -119,10 +119,10 @@ def parse(String message) {
         if (debugMode) log.debug "Non-JSON message: ${message}"
     }
 }
- 
+
 def processMessage(String raw) {
     if (debugMode) log.debug "RX: ${raw}"
- 
+
     def json
     try {
         json = new groovy.json.JsonSlurper().parseText(raw)
@@ -130,7 +130,7 @@ def processMessage(String raw) {
         log.warn "JSON parse error on: ${raw?.take(100)}"
         return
     }
- 
+
     switch (json?.command) {
         case "SendParamList":
             handleParamList(json)
@@ -148,7 +148,7 @@ def processMessage(String raw) {
             if (debugMode) log.debug "Unhandled command: ${json?.command}"
     }
 }
- 
+
 // ============================================================
 // ===================== REQUEST EQUIPMENT ===================
 // ============================================================
@@ -161,7 +161,7 @@ def requestEquipment() {
     ])
     runIn(2, "requestGroups")
 }
- 
+
 def requestGroups() {
     if (debugMode) log.debug "Requesting equipment — circuit groups"
     // Use condition-based query instead of hardcoded GRP01-GRP05
@@ -172,7 +172,7 @@ def requestGroups() {
     ])
     runIn(2, "requestBodies")
 }
- 
+
 def requestBodies() {
     if (debugMode) log.debug "Requesting equipment — bodies"
     sendCommand([
@@ -182,7 +182,7 @@ def requestBodies() {
     ])
     runIn(2, "requestPumps")
 }
- 
+
 def requestPumps() {
     if (debugMode) log.debug "Requesting equipment — pumps"
     sendCommand([
@@ -192,7 +192,7 @@ def requestPumps() {
     ])
     runIn(2, "requestSensors")
 }
- 
+
 def requestSensors() {
     if (debugMode) log.debug "Requesting equipment — sensors"
     sendCommand([
@@ -202,7 +202,7 @@ def requestSensors() {
     ])
     runIn(2, "requestChem")
 }
- 
+
 def requestChem() {
     if (debugMode) log.debug "Requesting equipment — chlorinator"
     sendCommand([
@@ -212,7 +212,7 @@ def requestChem() {
     ])
     runIn(3, "subscribeToUpdates")
 }
- 
+
 def subscribeToUpdates() {
     if (debugMode) log.debug "Subscribing to live updates"
     sendCommand([
@@ -221,7 +221,7 @@ def subscribeToUpdates() {
         objectList: [[objnam: "ALL", keys: ["STATUS", "TEMP", "RPM", "WATTS", "GPM", "SALT", "SOURCE", "LOTMP", "HITMP", "HTMODE", "HTSRC"]]]
     ])
 }
- 
+
 // ============================================================
 // ===================== PROCESS RESPONSES ===================
 // ============================================================
@@ -230,35 +230,35 @@ def handleParamList(json) {
         def name   = obj.objnam
         def params = obj.params
         if (!name || !params) return
- 
+
         if (!state.objectMap) state.objectMap = [:]
         if (!state.objectMap[name]) state.objectMap[name] = [:]
         params.each { k, v -> state.objectMap[name][k] = v }
         state.objectMap[name].objnam = name
- 
+
         routeUpdate(name, params)
     }
 }
- 
+
 def handleNotifyList(json) {
     json?.objectList?.each { obj ->
         def name   = obj.objnam
         def params = obj.params
         if (!name || !params) return
- 
+
         if (!state.objectMap) state.objectMap = [:]
         if (!state.objectMap[name]) state.objectMap[name] = [:]
         // Merge so partial NotifyList updates always have full object context (e.g. SUBTYP)
         params.each { k, v -> state.objectMap[name][k] = v }
- 
+
         routeUpdate(name, params)
     }
 }
- 
+
 def routeUpdate(String objnam, Map params) {
     def objType = params.OBJTYP ?: state.objectMap?.get(objnam)?.OBJTYP
     if (!objType) return
- 
+
     switch (objType) {
         case "CIRCUIT":  processCircuit(objnam, params); break
         case "CIRCGRP":  processCircuit(objnam, params); break
@@ -268,13 +268,13 @@ def routeUpdate(String objnam, Map params) {
         case "CHEM":     processChem(objnam, params);    break
     }
 }
- 
+
 // ============================================================
 // ===================== DEVICE UPDATES ======================
 // ============================================================
 def processCircuit(String objnam, Map params) {
     def subtyp = params.SUBTYP ?: state.objectMap?.get(objnam)?.SUBTYP ?: ""
- 
+
     def isUserCircuit = objnam.matches("C\\d+")
     def isGroup       = objnam.matches("GRP\\d+") || objnam.matches("CIRCGRP\\d+")
     def isFeature     = objnam.matches("FTR\\d+")
@@ -282,25 +282,25 @@ def processCircuit(String objnam, Map params) {
         if (debugMode) log.debug "Skipping internal circuit: ${objnam}"
         return
     }
- 
+
     // POOL and SPA subtypes are managed as body devices
     if (subtyp == "POOL" || subtyp == "SPA") {
         if (debugMode) log.debug "Skipping body circuit (handled as body): ${objnam} (${subtyp})"
         return
     }
- 
+
     def label  = params.SNAME ?: state.objectMap?.get(objnam)?.SNAME ?: objnam
     def status = params.STATUS
     if (status == null) return
- 
+
     def dni   = "intellicenter-circuit-${objnam}"
     def child = getOrCreateChild("Generic Component Switch", dni, label)
     if (!child) return
- 
+
     child.sendEvent(name: "switch", value: (status == "ON" ? "on" : "off"))
     if (debugMode) log.debug "Circuit [${label}] (${subtyp}): ${status}"
 }
- 
+
 def processBody(String objnam, Map params) {
     def subtyp = params.SUBTYP ?: state.objectMap?.get(objnam)?.SUBTYP ?: ""
     def label  = params.SNAME  ?: state.objectMap?.get(objnam)?.SNAME  ?: objnam
@@ -310,7 +310,7 @@ def processBody(String objnam, Map params) {
     def hitmp  = params.HITMP
     def htmode = params.HTMODE
     def htsrc  = params.HTSRC
- 
+
     // Body devices are created under the app (not bridge) to avoid
     // Hubitat's grandchild device limitation. Route creation through parent app.
     def dni  = "intellicenter-body-${objnam}"
@@ -319,7 +319,7 @@ def processBody(String objnam, Map params) {
         log.warn "processBody: could not get/create body device ${label} (${dni})"
         return
     }
- 
+
     if (status != null) {
         body.sendEvent(name: "switch",      value: (status == "ON" ? "on" : "off"))
         body.sendEvent(name: "bodyStatus",  value: (status == "ON" ? "On" : "Off"))
@@ -328,28 +328,28 @@ def processBody(String objnam, Map params) {
     if (temp  != null) body.sendEvent(name: "temperature",     value: temp.toInteger(),  unit: "°F")
     if (lotmp != null) body.sendEvent(name: "heatingSetpoint", value: lotmp.toInteger(), unit: "°F")
     if (hitmp != null) body.sendEvent(name: "maxSetTemp",      value: hitmp.toInteger(), unit: "°F")
- 
+
     if (htmode != null) {
         def modeMap = ["0":"Off","1":"Heater","2":"Solar Only","3":"Solar Preferred",
                        "4":"Heat Pump","5":"Heat Pump Preferred","OFF":"Off"]
         body.sendEvent(name: "heaterMode", value: modeMap[htmode.toString()] ?: htmode)
     }
- 
+
     if (htsrc != null) {
         def srcMap = ["00000":"Off","H0001":"Heater","S0001":"Solar Only",
                       "H0002":"Solar Preferred","H0003":"Heat Pump","H0004":"Heat Pump Preferred"]
         body.sendEvent(name: "heatSource", value: srcMap[htsrc] ?: htsrc)
     }
- 
+
     if (debugMode) log.debug "Body [${label}] (${subtyp}): status=${status} temp=${temp} setpt=${lotmp} maxTemp=${hitmp} htmode=${htmode} htsrc=${htsrc}"
 }
- 
+
 def processPump(String objnam, Map params) {
     def label = params.SNAME ?: state.objectMap?.get(objnam)?.SNAME ?: objnam
     def rpm   = params.RPM
     def watts = (params.WATTS && params.WATTS != "WATTS") ? params.WATTS : null
     def gpm   = params.GPM
- 
+
     def pumpDni = "intellicenter-pump-${objnam}"
     def pump    = getOrCreateChild("Pentair IntelliCenter Pump", pumpDni, label)
     if (pump) {
@@ -357,10 +357,10 @@ def processPump(String objnam, Map params) {
         if (watts != null)                         pump.sendEvent(name: "watts", value: watts.toInteger(), unit: "W")
         if (gpm   != null && gpm.toInteger() > 0)  pump.sendEvent(name: "gpm",   value: gpm.toInteger(),   unit: "GPM")
     }
- 
+
     if (debugMode) log.debug "Pump [${label}]: rpm=${rpm} watts=${watts} gpm=${gpm}"
 }
- 
+
 def processSensor(String objnam, Map params) {
     def subtyp = params.SUBTYP ?: state.objectMap?.get(objnam)?.SUBTYP ?: ""
     // POOL and SPA temps are already reported on the body device
@@ -368,33 +368,33 @@ def processSensor(String objnam, Map params) {
         if (debugMode) log.debug "Skipping body sensor (handled by body temp): ${objnam} (${subtyp})"
         return
     }
- 
+
     def label  = params.SNAME ?: state.objectMap?.get(objnam)?.SNAME ?: objnam
     def source = params.SOURCE
     if (source == null) return
- 
+
     def c = getOrCreateChild("Generic Component Temperature Sensor", "intellicenter-sensor-${objnam}", label)
     c?.sendEvent(name: "temperature", value: source.toInteger(), unit: "°F")
     if (debugMode) log.debug "Sensor [${label}]: ${source}°F"
 }
- 
+
 def processChem(String objnam, Map params) {
     def label  = params.SNAME ?: state.objectMap?.get(objnam)?.SNAME ?: "Chlorinator"
     def status = params.STATUS
     def salt   = params.SALT
- 
+
     // Use a generic switch for on/off; salt level stored as a separate attribute.
     // Note: Generic Component Switch does not have a saltLevel capability — this is
     // informational only and will appear in the device's current states list.
     def c = getOrCreateChild("Generic Component Switch", "intellicenter-chem-${objnam}", label)
     if (!c) return
- 
+
     if (status != null) c.sendEvent(name: "switch",    value: (status == "ON" ? "on" : "off"))
     if (salt   != null) c.sendEvent(name: "saltLevel", value: salt.toInteger(), unit: "PPM")
- 
+
     if (debugMode) log.debug "Chem [${label}]: status=${status} salt=${salt}"
 }
- 
+
 // ============================================================
 // ===================== BODY COMMANDS =======================
 // ============================================================
@@ -407,7 +407,7 @@ def setBodyStatus(String childDni, String status) {
         objectList: [[objnam: objnam, params: [STATUS: status]]]
     ])
 }
- 
+
 def setBodySetPoint(String childDni, Integer temp) {
     def objnam = objnamFromDni(childDni)
     if (!objnam) { log.warn "setBodySetPoint: no objnam for DNI ${childDni}"; return }
@@ -417,11 +417,11 @@ def setBodySetPoint(String childDni, Integer temp) {
         objectList: [[objnam: objnam, params: [LOTMP: temp.toString()]]]
     ])
 }
- 
+
 def setBodyHeatSource(String childDni, String source) {
     def objnam = objnamFromDni(childDni)
     if (!objnam) { log.warn "setBodyHeatSource: no objnam for DNI ${childDni}"; return }
- 
+
     // Map friendly name → IntelliCenter HTSRC object ID
     def srcMap = [
         "Off"                  : "00000",
@@ -433,14 +433,14 @@ def setBodyHeatSource(String childDni, String source) {
     ]
     def htsrcId = srcMap[source]
     if (!htsrcId) { log.warn "setBodyHeatSource: unknown source '${source}'"; return }
- 
+
     if (debugMode) log.debug "setBodyHeatSource: ${objnam} HTSRC=${htsrcId} (${source})"
     sendCommand([
         command: "SetParamList",
         objectList: [[objnam: objnam, params: [HTSRC: htsrcId]]]
     ])
 }
- 
+
 // ============================================================
 // ===================== PUMP SPEED COMMAND ==================
 // ============================================================
@@ -453,7 +453,7 @@ def setPumpSpeed(String childDni, Integer rpm) {
         objectList: [[objnam: objnam, params: [RPM: rpm.toString()]]]
     ])
 }
- 
+
 // ============================================================
 // ===================== CIRCUIT COMMANDS ====================
 // ============================================================
@@ -467,7 +467,7 @@ def circuitOn(String childDni) {
     ])
     getChildDevice(childDni)?.sendEvent(name: "switch", value: "on")
 }
- 
+
 def circuitOff(String childDni) {
     def objnam = objnamFromDni(childDni)
     if (!objnam) { log.warn "No objnam for DNI: ${childDni}"; return }
@@ -478,10 +478,10 @@ def circuitOff(String childDni) {
     ])
     getChildDevice(childDni)?.sendEvent(name: "switch", value: "off")
 }
- 
+
 def componentOn(child)  { circuitOn(child.deviceNetworkId) }
 def componentOff(child) { circuitOff(child.deviceNetworkId) }
- 
+
 // ============================================================
 // ===================== SEND COMMAND ========================
 // ============================================================
@@ -501,7 +501,7 @@ def sendCommand(Map payload) {
         sendEvent(name: "connectionStatus", value: "Disconnected")
     }
 }
- 
+
 // ============================================================
 // ===================== COMPONENT CALLBACKS =================
 // ============================================================
@@ -514,7 +514,7 @@ def componentRefresh(child) {
         objectList: [[objnam: objnam, keys: ["STATUS","TEMP","RPM","WATTS","GPM","SALT","SOURCE","LOTMP","HITMP","HTMODE","HTSRC"]]]
     ])
 }
- 
+
 def refreshBody(String dni) {
     def objnam = objnamFromDni(dni)
     if (!objnam) return
@@ -523,7 +523,7 @@ def refreshBody(String dni) {
         objectList: [[objnam: objnam, keys: ["STATUS","TEMP","LOTMP","HITMP","HTMODE","HTSRC"]]]
     ])
 }
- 
+
 // ============================================================
 // ===================== HELPERS =============================
 // ============================================================
@@ -538,7 +538,7 @@ def objnamFromDni(String dni) {
     def idx = dni.lastIndexOf("-")
     return idx > 0 ? dni.substring(idx + 1) : null
 }
- 
+
 def getOrCreateChild(String driver, String dni, String label) {
     def child = getChildDevice(dni)
     if (!child) {
@@ -552,3 +552,4 @@ def getOrCreateChild(String driver, String dni, String label) {
     }
     return child
 }
+

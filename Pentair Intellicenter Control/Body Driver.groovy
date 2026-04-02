@@ -16,6 +16,13 @@ metadata {
         attribute "tile",            "string"
 
         command "refresh"
+
+        command "Turn On",          []
+        command "Confirm Turn On",  []
+        command "Turn Off",         []
+        command "Set Temperature",  [[name: "degrees*", type: "NUMBER", description: "Set point in °F (40–104)"]]
+        command "Set Heat Source",  [[name: "source*",  type: "ENUM",   description: "Heat source",
+            constraints: ["Off", "Heater", "Solar Only", "Solar Preferred", "Heat Pump", "Heat Pump Preferred"]]]
     }
 
     preferences {
@@ -91,6 +98,41 @@ def setHeatingSetpoint(temp) {
 // ===================== HEAT SOURCE =========================
 // ============================================================
 def setHeatSource(source) {
+    sendEvent(name: "heatSource", value: source)
+    debounceTile()
+}
+
+// ============================================================
+// ===================== FRIENDLY COMMAND WRAPPERS ===========
+// ============================================================
+def "Turn On"()         { on() }
+def "Confirm Turn On"() { confirmOn() }
+def "Turn Off"()        { off() }
+
+def "Set Temperature"(degrees) {
+    def temp = degrees.toInteger()
+    def minT = (minSetPoint ?: 40).toInteger()
+    def maxT = (maxSetPoint ?: 104).toInteger()
+    if (temp < minT || temp > maxT) {
+        log.warn "Set point ${temp}°F out of range (${minT}–${maxT}°F) — ignoring"
+        return
+    }
+    def base = endpointBase ?: ""
+    def dni  = device.deviceNetworkId
+    if (base) {
+        httpGet("${base}/body/${dni}/setpoint/${temp}") { }
+    }
+    sendEvent(name: "heatingSetpoint", value: temp, unit: "°F")
+    debounceTile()
+}
+
+def "Set Heat Source"(source) {
+    def base = endpointBase ?: ""
+    def dni  = device.deviceNetworkId
+    def val  = source.toUpperCase()
+    if (base) {
+        httpGet("${base}/body/${dni}/heatsource/${source.replaceAll(' ','_').toLowerCase()}") { }
+    }
     sendEvent(name: "heatSource", value: source)
     debounceTile()
 }

@@ -15,23 +15,15 @@ metadata {
         attribute "pendingOn",       "string"
         attribute "tile",            "string"
 
-        command "on"
-        command "confirmOn"
-        command "off"
-        command "setHeatingSetpoint", [[name: "temperature*", type: "NUMBER", description: "New set point (°F)"]]
-        command "adjustSetPointUp"
-        command "adjustSetPointDown"
-        command "setHeatSource", [[name: "source*", type: "ENUM", description: "Heat source",
-            constraints: ["OFF", "HEATER", "SOLAR ONLY", "SOLAR PREFERRED", "HEAT PUMP", "HEAT PUMP PREFERRED"]]]
         command "refresh"
     }
 
     preferences {
-        input "minSetPoint",    "number", title: "Minimum Set Point (°F)",       defaultValue: 40,  required: true
-        input "maxSetPoint",    "number", title: "Maximum Set Point (°F)",        defaultValue: 104, required: true
-        input "confirmTimeout", "number", title: "Confirm On timeout (seconds)",  defaultValue: 10,  required: true
-        input "endpointBase",   "text",   title: "App Endpoint Base (auto-set)",  required: false
-        input "debugMode",      "bool",   title: "Debug Logging",                 defaultValue: false
+        input "minSetPoint",    "number", title: "Minimum Set Point (°F)",      defaultValue: 40,  required: true
+        input "maxSetPoint",    "number", title: "Maximum Set Point (°F)",       defaultValue: 104, required: true
+        input "confirmTimeout", "number", title: "Confirm On timeout (seconds)", defaultValue: 10,  required: true
+        input "endpointBase",   "text",   title: "App Endpoint Base (auto-set)", required: false
+        input "debugMode",      "bool",   title: "Debug Logging",                defaultValue: false
     }
 }
 
@@ -51,37 +43,31 @@ def updated() {
 
 // ============================================================
 // ===================== ON / OFF WITH CONFIRMATION ==========
+// These are called by the app endpoint, not directly by users
 // ============================================================
 def on() {
-    if (device.currentValue("switch") == "on") {
-        log.info "${device.displayName} is already on"
-        return
-    }
+    if (device.currentValue("switch") == "on") return
     def timeout = (confirmTimeout ?: 10).toInteger()
-    if (debugMode) log.debug "on() — pending confirmation (${timeout}s)"
     sendEvent(name: "pendingOn", value: "true")
     runIn(timeout, cancelOn)
     debounceTile()
 }
 
 def confirmOn() {
-    if (device.currentValue("pendingOn") != "true") {
-        log.warn "confirmOn called but no pending on request"
-        return
-    }
+    if (device.currentValue("pendingOn") != "true") return
     unschedule(cancelOn)
     sendEvent(name: "pendingOn",  value: "false")
     sendEvent(name: "switch",     value: "on")
     sendEvent(name: "bodyStatus", value: "On")
-    if (debugMode) log.debug "confirmOn() — sending ON to controller"
-    parent?.setBodyStatus(device.deviceNetworkId, "ON")
+    // Relay via app endpoint — no parent needed
+    def dni = device.deviceNetworkId
+    def base = endpointBase ?: ""
+    if (base) httpGet("${base}/body/${dni}/confirmbody") { }
     debounceTile()
 }
 
 def cancelOn() {
-    if (debugMode) log.debug "cancelOn() — confirmation timed out"
     sendEvent(name: "pendingOn", value: "false")
-    log.info "${device.displayName} turn-on cancelled (timed out)"
     debounceTile()
 }
 
@@ -90,45 +76,22 @@ def off() {
     sendEvent(name: "pendingOn", value: "false")
     sendEvent(name: "switch",     value: "off")
     sendEvent(name: "bodyStatus", value: "Off")
-    if (debugMode) log.debug "off() — sending OFF to controller"
-    parent?.setBodyStatus(device.deviceNetworkId, "OFF")
     debounceTile()
 }
 
 // ============================================================
 // ===================== SET POINT ===========================
 // ============================================================
-def setHeatingSetpoint(temperature) {
-    def temp = temperature.toInteger()
-    def minT = (minSetPoint ?: 40).toInteger()
-    def maxT = (maxSetPoint ?: 104).toInteger()
-    if (temp < minT || temp > maxT) {
-        log.warn "Set point ${temp}°F out of range (${minT}–${maxT}°F) — ignoring"
-        return
-    }
-    if (debugMode) log.debug "setHeatingSetpoint: ${temp}°F"
-    sendEvent(name: "heatingSetpoint", value: temp, unit: "°F")
-    parent?.setBodySetPoint(device.deviceNetworkId, temp)
+def setHeatingSetpoint(temp) {
+    sendEvent(name: "heatingSetpoint", value: temp.toInteger(), unit: "°F")
     debounceTile()
-}
-
-def adjustSetPointUp() {
-    def current = (device.currentValue("heatingSetpoint") ?: 80).toInteger()
-    setHeatingSetpoint(current + 1)
-}
-
-def adjustSetPointDown() {
-    def current = (device.currentValue("heatingSetpoint") ?: 80).toInteger()
-    setHeatingSetpoint(current - 1)
 }
 
 // ============================================================
 // ===================== HEAT SOURCE =========================
 // ============================================================
 def setHeatSource(source) {
-    if (debugMode) log.debug "setHeatSource: ${source}"
     sendEvent(name: "heatSource", value: source)
-    parent?.setBodyHeatSource(device.deviceNetworkId, source)
     debounceTile()
 }
 
@@ -142,8 +105,6 @@ def refresh() {
 // ============================================================
 // ===================== TILE DEBOUNCE =======================
 // ============================================================
-// Collapses rapid successive updates into a single render
-// to avoid excessive CPU load from frequent controller updates.
 def debounceTile() {
     unschedule(renderTile)
     runIn(3, renderTile)
@@ -153,20 +114,20 @@ def debounceTile() {
 // ===================== TILE RENDERER =======================
 // ============================================================
 def renderTile() {
-    def sw      = device.currentValue("switch")          ?: "off"
-    def temp    = (device.currentValue("temperature")    ?: 0).toDouble()
-    def setpt   = (device.currentValue("heatingSetpoint")?: 0).toDouble()
-    def maxTemp = (device.currentValue("maxSetTemp")     ?: 104).toDouble()
-    def htmode  = device.currentValue("heaterMode")      ?: "—"
-    def htsrc   = device.currentValue("heatSource")      ?: "OFF"
-    def pending = device.currentValue("pendingOn")       ?: "false"
+    def sw      = device.currentValue("switch")           ?: "off"
+    def temp    = (device.currentValue("temperature")     ?: 0).toDouble()
+    def setpt   = (device.currentValue("heatingSetpoint") ?: 0).toDouble()
+    def maxTemp = (device.currentValue("maxSetTemp")      ?: 104).toDouble()
+    def htmode  = device.currentValue("heaterMode")       ?: "—"
+    def htsrc   = device.currentValue("heatSource")       ?: "Off"
+    def pending = device.currentValue("pendingOn")        ?: "false"
     def isOn      = (sw == "on")
     def isPending = (pending == "true")
     def name    = device.displayName
     def dni     = device.deviceNetworkId
     def base    = endpointBase ?: ""
 
-    // URL helpers — spaces in heat source replaced with underscore for URL safety
+    // URL builder
     def url = { String cmd -> "${base}/body/${dni}/${cmd}" }
     def srcUrl = { String src -> "${base}/body/${dni}/heatsource/${src.replaceAll(' ','_').toLowerCase()}" }
 
@@ -204,25 +165,25 @@ def renderTile() {
     def switchLabel = isOn ? "● On"    : "● Off"
 
     // Heat source buttons
-    def sources = ["OFF", "HEATER", "SOLAR ONLY", "SOLAR PREFERRED", "HEAT PUMP", "HEAT PUMP PREFERRED"]
-    def sourceLabels = ["Off", "Heater", "Solar Only", "Solar Pref.", "Heat Pump", "HP Pref."]
-    def srcBtns = [sources, sourceLabels].transpose().collect { src, lbl ->
-        def active  = (htsrc == src) ? "ic-src-active" : ""
-        def fetchUrl = base ? "fetch('${srcUrl(src)}');" : ""
+    def sources      = ["Off", "Heater", "Solar Only", "Solar Preferred", "Heat Pump", "Heat Pump Preferred"]
+    def sourceValues = ["OFF", "HEATER", "SOLAR ONLY", "SOLAR PREFERRED", "HEAT PUMP", "HEAT PUMP PREFERRED"]
+    def srcBtns = [sourceValues, sources].transpose().collect { val, lbl ->
+        def active   = (htsrc?.toUpperCase() == val) ? "ic-src-active" : ""
+        def fetchUrl = base ? "fetch('${srcUrl(val)}');" : ""
         "<button class='ic-src ${active}' onclick=\"${fetchUrl}\">${lbl}</button>"
     }.join("")
 
-    // On/off button states
-    def btnOnStyle  = isPending ? "background:#fbbf24;color:#0a1628;" : "background:#0f3460;color:#38bdf8;border:1.5px solid #38bdf8;"
-    def btnOnLabel  = isPending ? "Cancel"  : "Turn On"
-    def btnOnFetch  = base ? (isPending ? "fetch('${url('on')}');" : "fetch('${url('on')}');") : ""
-    def confirmDisp = isPending ? "flex" : "none"
+    // Power button states
+    def btnOnStyle   = isPending ? "background:#fbbf24;color:#0a1628;" : "background:#0f3460;color:#38bdf8;border:1.5px solid #38bdf8;"
+    def btnOnLabel   = isPending ? "Cancel" : "Turn On"
+    def btnOnFetch   = base ? "fetch('${url('on')}');"        : ""
+    def confirmDisp  = isPending ? "flex"   : "none"
     def btnConfFetch = base ? "fetch('${url('confirmOn')}');" : ""
     def btnOffFetch  = base ? "fetch('${url('off')}');"       : ""
     def btnUpFetch   = base ? "fetch('${url('setpointup')}');"   : ""
     def btnDnFetch   = base ? "fetch('${url('setpointdown')}');" : ""
 
-    def noBase = !base ? "<div style='color:#fbbf24;font-size:10px;text-align:center;margin-bottom:6px;'>⚠ Re-open app to enable controls</div>" : ""
+    def noBase = !base ? "<div style='color:#fbbf24;font-size:10px;text-align:center;margin-bottom:6px;'>⚠ Open app and click Done to enable controls</div>" : ""
 
     def html = """<style>
 .ic{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#112240;border-radius:20px;padding:16px 14px 14px;color:#fff;max-width:260px;margin:0 auto;box-sizing:border-box;}
@@ -242,15 +203,15 @@ def renderTile() {
 .ic-block{background:#1e3a5f;border-radius:11px;padding:10px 11px;margin-bottom:7px;}
 .ic-hdr{display:flex;justify-content:space-between;font-size:9px;color:#94a3b8;text-transform:uppercase;letter-spacing:.5px;margin-bottom:7px;}
 .ic-adj-row{display:flex;align-items:center;gap:7px;}
-.ic-adj{width:34px;height:34px;border-radius:50%;border:none;background:#0f3460;color:#38bdf8;font-size:18px;font-weight:700;cursor:pointer;flex-shrink:0;line-height:1;display:flex;align-items:center;justify-content:center;}
-.ic-setval{flex:1;text-align:center;font-size:20px;font-weight:800;color:#38bdf8;}
+.ic-adj{width:36px;height:36px;border-radius:50%;border:none;background:#0f3460;color:#38bdf8;font-size:20px;font-weight:700;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center;}
+.ic-setval{flex:1;text-align:center;font-size:22px;font-weight:800;color:#38bdf8;}
 .ic-srclbl{font-size:8px;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;}
 .ic-srcbtns{display:flex;flex-wrap:wrap;gap:4px;}
 .ic-src{padding:4px 8px;border-radius:7px;border:1.5px solid #2d4a6f;background:#0a1628;color:#64748b;font-size:9px;font-weight:600;cursor:pointer;}
 .ic-src-active{border-color:#38bdf8;color:#38bdf8;background:#0f3460;}
 .ic-pwrow{display:flex;gap:7px;margin-bottom:6px;}
-.ic-btn{flex:1;padding:9px 4px;border-radius:11px;border:none;font-size:12px;font-weight:700;cursor:pointer;}
-.ic-status{text-align:center;font-size:11px;font-weight:600;}
+.ic-btn{flex:1;padding:10px 4px;border-radius:11px;border:none;font-size:12px;font-weight:700;cursor:pointer;}
+.ic-status{text-align:center;font-size:12px;font-weight:700;margin-top:2px;}
 </style>
 <div class='ic'>
   <div class='ic-title'>${name}</div>
@@ -272,6 +233,7 @@ def renderTile() {
   <div class='ic-row'>
     <div class='ic-box'><div class='ic-blbl'>Set Point</div><div class='ic-bval'>${Math.round(setpt)}°</div></div>
     <div class='ic-box'><div class='ic-blbl'>Max Temp</div><div class='ic-bval'>${Math.round(maxTemp)}°</div></div>
+    <div class='ic-box'><div class='ic-blbl'>Status</div><div class='ic-bval' style='color:${switchColor};'>${isOn ? "On" : "Off"}</div></div>
   </div>
   <div class='ic-block'>
     <div class='ic-hdr'><span>Set Point</span><span style='color:#38bdf8;'>${Math.round(setpt)}°F</span></div>
@@ -295,4 +257,3 @@ def renderTile() {
 
     sendEvent(name: "tile", value: html, displayed: false)
 }
-

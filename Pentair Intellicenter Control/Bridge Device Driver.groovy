@@ -283,9 +283,15 @@ def processCircuit(String objnam, Map params) {
         return
     }
 
-    // POOL and SPA subtypes are managed as body devices
+    // POOL and SPA subtypes are managed as body devices.
+    // Also check bodyObjnams — SUBTYP may be absent on partial NotifyList
+    // updates arriving before the body's own object has been fully populated.
     if (subtyp == "POOL" || subtyp == "SPA") {
-        if (debugMode) log.debug "Skipping body circuit (handled as body): ${objnam} (${subtyp})"
+        if (debugMode) log.debug "Skipping body circuit (subtyp match): ${objnam} (${subtyp})"
+        return
+    }
+    if (state.bodyObjnams?.contains(objnam)) {
+        if (debugMode) log.debug "Skipping body circuit (objnam match): ${objnam}"
         return
     }
 
@@ -311,19 +317,27 @@ def processBody(String objnam, Map params) {
     def htmode = params.HTMODE
     def htsrc  = params.HTSRC
 
-    // Body devices are created under the app (not bridge) to avoid
-    // Hubitat's grandchild device limitation. Route creation through parent app.
+    // Track body objnams so processCircuit can filter them out even when
+    // SUBTYP is missing from a partial NotifyList update
+    if (!state.bodyObjnams) state.bodyObjnams = []
+    if (!state.bodyObjnams.contains(objnam)) state.bodyObjnams << objnam
+
+    // Body devices are bridge children, same as circuits and pumps.
     def dni  = "intellicenter-body-${objnam}"
-    def body = parent?.getOrCreateBodyDevice(dni, label)
+    def body = getOrCreateChild("Pentair IntelliCenter Body", dni, label)
     if (!body) {
         log.warn "processBody: could not get/create body device ${label} (${dni})"
         return
     }
 
+    // Stamp endpointBase so tile buttons can reach the app's HTTP endpoints
+    if (endpointBase) {
+        body.updateSetting("endpointBase", [value: endpointBase, type: "text"])
+    }
+
     if (status != null) {
-        body.sendEvent(name: "switch",      value: (status == "ON" ? "on" : "off"))
-        body.sendEvent(name: "bodyStatus",  value: (status == "ON" ? "On" : "Off"))
-        if (status == "ON") body.sendEvent(name: "pendingOn", value: "false")
+        body.sendEvent(name: "switch",     value: (status == "ON" ? "on" : "off"))
+        body.sendEvent(name: "bodyStatus", value: (status == "ON" ? "On" : "Off"))
     }
     if (temp  != null) body.sendEvent(name: "temperature",     value: temp.toInteger(),  unit: "°F")
     if (lotmp != null) body.sendEvent(name: "heatingSetpoint", value: lotmp.toInteger(), unit: "°F")
@@ -552,4 +566,5 @@ def getOrCreateChild(String driver, String dni, String label) {
     }
     return child
 }
+
 

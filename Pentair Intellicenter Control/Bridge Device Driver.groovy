@@ -140,6 +140,10 @@ def processMessage(String raw) {
         case "NotifyList":
             handleNotifyList(json)
             break
+        case "SetParamList":
+            // Acknowledgement of a command we sent — response:200 means success, nothing to process
+            if (debugMode) log.debug "SetParamList ack: response=${json?.response}"
+            break
         case "Error":
             log.warn "Controller error ${json.response}: ${json.description}"
             break

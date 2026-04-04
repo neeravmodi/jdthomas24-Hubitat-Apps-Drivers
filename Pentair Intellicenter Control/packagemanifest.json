@@ -1,23 +1,32 @@
 {
-  "packageName": "Pentair Intellicenter Controller ",
+  "packageName": "Pentair Intellicenter Pool Controller",
   "author": "Jdthomas24",
   "version": "1.0.0",
   "category": "Utility",
-  "description": "Pentair Intellicenter Control",
-  "dateReleased": "3/30/26",
-  "minimumHEVersion": "2.3",
+  "description": "Penatair Intellicenter Pool Controller ",
+  "dateReleased": "3-26-26",
+  "minimumHEVersion": "2.3.0",
   "apps": [
     {
       "name": "Parent App Bridge",
-      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Parent%20App%20Bridge.groovy",
-      "required": true,
-      "oauth": true
+      "location": "https://github.com/jdthomas24/Hubitat-Apps-Drivers/blob/main/Pentair%20Intellicenter%20Control/Parent%20App%20Bridge.groovy",
+      "required": true
     }
   ],
   "drivers": [
     {
-      "name": "Driver",
-      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/driver.groovy",
+      "name": "Pool Body Driver",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Body%20Driver.groovy",
+      "required": true
+    },
+    {
+      "name": "Device Bridge Driver",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Bridge%20Device%20Driver.groovy"
+    },
+    {
+      "name": "Pump Control Driver",
+      "location": "https://raw.githubusercontent.com/jdthomas24/Hubitat-Apps-Drivers/refs/heads/main/Pentair%20Intellicenter%20Control/Pump%20Speed%20Driver.groovy",
       "required": true
     }
   ]
+}

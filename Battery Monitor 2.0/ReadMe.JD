@@ -10,10 +10,11 @@ Advanced Hubitat battery monitoring with analytics, trends, and replacement trac
 ## Installation
 - Install via Hubitat Package Manager.
 - Auto-discover battery devices and select which devices to monitor.
-- Configure daily summary time and notifications.
+- Configure summary time and notifications.
 - Monitor battery trends and replacement history.
 
 ## Notes
 - Battery trends may be overestimated until at least 5 battery events have been reported.
 - Daily report sorts devices by Critical, Good, and Full categories.
+- Full info page built in app
 
